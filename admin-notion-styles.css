@@ -1,0 +1,76 @@
+/* =============================================
+   ADMIN PANEL NOTION STYLES
+   ============================================= */
+.admin-empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 60px 40px;
+    text-align: center;
+    color: var(--text-secondary);
+    min-height: 300px;
+}
+
+.admin-empty-state p {
+    font-size: 1.1rem;
+    margin-bottom: 8px;
+    color: var(--text-primary);
+}
+
+.admin-empty-state small {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+/* Admin table cells */
+.item-name-cell {
+    font-weight: 500;
+    color: var(--text-primary);
+    max-width: 200px;
+}
+
+.item-desc-cell {
+    color: var(--text-secondary);
+    max-width: 250px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 0.85rem;
+}
+
+.price-cell {
+    font-family: 'Courier New', monospace;
+    font-weight: 600;
+    color: var(--color-primary);
+    text-align: right;
+}
+
+.unit-cell {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+}
+
+/* Badges */
+.rubro-badge,
+.categoria-badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.rubro-badge {
+    background: rgba(0, 180, 213, 0.15);
+    color: var(--color-primary);
+    border: 1px solid rgba(0, 180, 213, 0.3);
+}
+
+.categoria-badge {
+    background: rgba(243, 122, 31, 0.15);
+    color: var(--color-secondary);
+    border: 1px solid rgba(243, 122, 31, 0.3);
+}

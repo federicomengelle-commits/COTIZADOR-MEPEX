@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MEPEX Cotizador</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;500;600;700&family=Cabin:wght@400;500;600;700&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <style>
+        /* Inline critical CSS handling to prevent FOUC */
+        body {
+            visibility: hidden;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- LEFT COLUMN: NAVIGATION -->
+        <aside class="col-nav">
+            <div class="brand-area">
+                <img src="assets/logo_full.png" alt="MEPEX Logo" class="brand-logo">
+            </div>
+            <nav id="category-nav">
+                <!-- Nav items generated via JS -->
+            </nav>
+        </aside>
+
+        <!-- CENTER COLUMN: SELECTION AREA -->
+        <main class="col-main">
+            <header class="main-header">
+                <div class="header-top">
+                    <div class="header-right">
+                        <div id="sync-status" class="sync-status sync-offline" title="Estado de conexión">
+                            <span class="sync-dot"></span>
+                            <span class="sync-text">Offline</span>
+                        </div>
+                    </div>
+                </div>
+            </header>
+
+            <!-- SECCIÓN 0: PARÁMETROS GENERALES DEL PROYECTO -->
+            <section id="general-params" class="params-section">
+                <div class="params-header">
+                    <div class="params-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 2L2 7l10 5 10-5-10-5z" />
+                            <path d="M2 17l10 5 10-5" />
+                            <path d="M2 12l10 5 10-5" />
+                        </svg>
+                    </div>
+                    <div class="params-title-area">
+                        <h2>Parámetros del Proyecto</h2>
+                        <p>Define las características base de la cotización</p>
+                    </div>
+                    <div id="event-info-display" class="event-info-display" style="display:none">
+                        <div class="event-info-name-venue"></div>
+                        <div class="event-info-dates"></div>
+                    </div>
+                </div>
+
+                <!-- Fila 1: Cliente, Proyecto, Evento -->
+                <div class="params-row params-row-main">
+                    <div class="input-group autocomplete-group">
+                        <label for="input-cliente">Cliente</label>
+                        <div class="autocomplete-wrapper">
+                            <input type="text" id="input-cliente" class="text-input autocomplete-input"
+                                placeholder="Buscar cliente..." autocomplete="off">
+                            <div id="clients-dropdown" class="autocomplete-dropdown"></div>
+                        </div>
+                    </div>
+                    <div class="input-group autocomplete-group">
+                        <label for="input-proyecto">Proyecto</label>
+                        <div class="autocomplete-wrapper">
+                            <input type="text" id="input-proyecto" class="text-input autocomplete-input"
+                                placeholder="Buscar proyecto..." autocomplete="off">
+                            <div id="projects-dropdown" class="autocomplete-dropdown"></div>
+                        </div>
+                    </div>
+                    <div class="input-group autocomplete-group">
+                        <label for="input-evento">Evento</label>
+                        <div class="autocomplete-wrapper">
+                            <input type="text" id="input-evento" class="text-input autocomplete-input"
+                                placeholder="Buscar evento..." autocomplete="off">
+                            <div id="events-dropdown" class="autocomplete-dropdown"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Selector de Tipo de Cotización -->
+                <div class="params-row">
+                    <div class="quotation-type-selector-params">
+                        <span class="param-inline-label">Tipo de Cotización</span>
+                        <div class="quotation-btns-params">
+                            <button class="quot-btn-param active" data-type="stand">
+                                <span class="quot-btn-icon">🏗️</span>
+                                <span class="quot-btn-label">Stand</span>
+                            </button>
+                            <button class="quot-btn-param" data-type="expo">
+                                <span class="quot-btn-icon">🎪</span>
+                                <span class="quot-btn-label">Expo</span>
+                            </button>
+                            <button class="quot-btn-param" data-type="alquiler">
+                                <span class="quot-btn-icon">📦</span>
+                                <span class="quot-btn-label">Alquiler</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ========================================= -->
+                <!-- BLOQUE STAND: Parámetros específicos -->
+                <!-- ========================================= -->
+                <div id="stand-params-block">
+                    <!-- Superficie + Frente + Profundidad + Tipo Stand -->
+                    <div class="params-row params-row-dimensions">
+                        <div class="input-group input-group-compact">
+                            <label for="input-metraje">Superficie</label>
+                            <div class="metraje-input">
+                                <input type="number" id="input-metraje" class="number-input" value="25" min="9"
+                                    max="500">
+                                <span class="input-suffix">m²</span>
+                            </div>
+                        </div>
+                        <div class="input-group input-group-compact">
+                            <label for="input-frontal">Frente</label>
+                            <div class="metraje-input">
+                                <input type="number" id="input-frontal" class="number-input" placeholder="—"
+                                    min="1" max="100" step="0.5">
+                                <span class="input-suffix">m</span>
+                            </div>
+                        </div>
+                        <div class="input-group input-group-compact">
+                            <label for="input-profundidad">Profundidad</label>
+                            <div class="metraje-input">
+                                <input type="number" id="input-profundidad" class="number-input" placeholder="—"
+                                    min="1" max="100" step="0.5">
+                                <span class="input-suffix">m</span>
+                            </div>
+                        </div>
+                        <div class="param-inline-group">
+                            <span class="param-inline-label">Tipo de Stand</span>
+                            <div class="stand-type-inline">
+                                <button class="stand-btn active" data-type="centro" data-sides="1"
+                                    title="1 lado abierto">
+                                    <svg viewBox="0 0 32 32" class="stand-mini-icon">
+                                        <rect x="4" y="4" width="24" height="24" fill="#2a2a2a" />
+                                        <line x1="4" y1="4" x2="28" y2="4" stroke="#00B4D5" stroke-width="3" />
+                                        <line x1="4" y1="4" x2="4" y2="28" stroke="#00B4D5" stroke-width="3" />
+                                        <line x1="28" y1="4" x2="28" y2="28" stroke="#00B4D5" stroke-width="3" />
+                                        <line x1="4" y1="28" x2="28" y2="28" stroke="#666" stroke-width="2"
+                                            stroke-dasharray="3" />
+                                    </svg>
+                                    <span>Centro</span>
+                                </button>
+                                <button class="stand-btn" data-type="esquina" data-sides="2" title="2 lados abiertos">
+                                    <svg viewBox="0 0 32 32" class="stand-mini-icon">
+                                        <rect x="4" y="4" width="24" height="24" fill="#2a2a2a" />
+                                        <line x1="4" y1="4" x2="28" y2="4" stroke="#00B4D5" stroke-width="3" />
+                                        <line x1="4" y1="4" x2="4" y2="28" stroke="#00B4D5" stroke-width="3" />
+                                        <line x1="28" y1="4" x2="28" y2="28" stroke="#666" stroke-width="2"
+                                            stroke-dasharray="3" />
+                                        <line x1="4" y1="28" x2="28" y2="28" stroke="#666" stroke-width="2"
+                                            stroke-dasharray="3" />
+                                    </svg>
+                                    <span>Esquina</span>
+                                </button>
+                                <button class="stand-btn" data-type="peninsula" data-sides="3" title="3 lados abiertos">
+                                    <svg viewBox="0 0 32 32" class="stand-mini-icon">
+                                        <rect x="4" y="4" width="24" height="24" fill="#2a2a2a" />
+                                        <line x1="4" y1="4" x2="28" y2="4" stroke="#00B4D5" stroke-width="3" />
+                                        <line x1="4" y1="4" x2="4" y2="28" stroke="#666" stroke-width="2"
+                                            stroke-dasharray="3" />
+                                        <line x1="28" y1="4" x2="28" y2="28" stroke="#666" stroke-width="2"
+                                            stroke-dasharray="3" />
+                                        <line x1="4" y1="28" x2="28" y2="28" stroke="#666" stroke-width="2"
+                                            stroke-dasharray="3" />
+                                    </svg>
+                                    <span>Península</span>
+                                </button>
+                                <button class="stand-btn" data-type="isla" data-sides="4" title="4 lados abiertos">
+                                    <svg viewBox="0 0 32 32" class="stand-mini-icon">
+                                        <rect x="4" y="4" width="24" height="24" fill="#2a2a2a" />
+                                        <line x1="4" y1="4" x2="28" y2="4" stroke="#666" stroke-width="2"
+                                            stroke-dasharray="3" />
+                                        <line x1="4" y1="4" x2="4" y2="28" stroke="#666" stroke-width="2"
+                                            stroke-dasharray="3" />
+                                        <line x1="28" y1="4" x2="28" y2="28" stroke="#666" stroke-width="2"
+                                            stroke-dasharray="3" />
+                                        <line x1="4" y1="28" x2="28" y2="28" stroke="#666" stroke-width="2"
+                                            stroke-dasharray="3" />
+                                    </svg>
+                                    <span>Isla</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Altura y Modificador -->
+                    <div class="params-row params-row-split">
+                        <!-- Altura -->
+                        <div class="param-inline-group">
+                            <span class="param-inline-label">Altura</span>
+                            <div class="height-inline">
+                                <button class="height-chip active" data-height="standard" data-multiplier="1"
+                                    title="Altura estándar - Solo afecta Estructura e Iluminación">
+                                    <span class="chip-label">Estándar</span>
+                                    <span class="chip-sub">2,50m</span>
+                                </button>
+                                <button class="height-chip" data-height="media" data-multiplier="1.15"
+                                    title="Altura media - Solo afecta Estructura e Iluminación">
+                                    <span class="chip-label">Media</span>
+                                    <span class="chip-sub">3,00m</span>
+                                    <span class="chip-badge">+15%</span>
+                                </button>
+                                <button class="height-chip" data-height="plus" data-multiplier="1.25"
+                                    title="Altura plus - Solo afecta Estructura e Iluminación">
+                                    <span class="chip-label">Plus</span>
+                                    <span class="chip-sub">3,50m</span>
+                                    <span class="chip-badge">+25%</span>
+                                </button>
+                                <button class="height-chip" data-height="extra" data-multiplier="1.4"
+                                    title="Altura extra - Solo afecta Estructura e Iluminación">
+                                    <span class="chip-label">Extra</span>
+                                    <span class="chip-sub">4,00m</span>
+                                    <span class="chip-badge">+40%</span>
+                                </button>
+                                <button class="height-chip" data-height="maxima" data-multiplier="1.7"
+                                    title="Altura máxima - Solo afecta Estructura e Iluminación">
+                                    <span class="chip-label">Máxima</span>
+                                    <span class="chip-sub">5,00m</span>
+                                    <span class="chip-badge">+70%</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Modificador Personalizado -->
+                        <div class="param-inline-group modifier-group">
+                            <span class="param-inline-label">Modificador</span>
+                            <div class="modifier-inline">
+                                <input type="text" id="modifier-name" class="modifier-name-input"
+                                    placeholder="Ej: Urgencia, Complejidad..." maxlength="30">
+                                <div class="modifier-percentage-wrap">
+                                    <input type="number" id="modifier-percentage" class="modifier-percentage-input"
+                                        value="0" min="-50" max="100" step="5">
+                                    <span class="modifier-suffix">%</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ========================================= -->
+                <!-- BLOQUE EXPO/ALQUILER: Gestión de Espacios -->
+                <!-- ========================================= -->
+                <div id="expo-params-block" style="display: none;">
+                    <div class="spaces-manager">
+                        <div class="spaces-header">
+                            <span class="param-inline-label">Espacios del Evento</span>
+                            <button id="btn-add-space" class="btn-add-space" title="Agregar espacio">
+                                <span>+</span> Agregar Espacio
+                            </button>
+                        </div>
+                        <div id="spaces-tabs" class="spaces-tabs">
+                            <!-- Tabs de espacios generados via JS -->
+                        </div>
+                        <div id="active-space-info" class="active-space-info">
+                            <!-- Info y controles del espacio activo -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Fee de Agencia (compartido) -->
+                <div class="params-row">
+                    <div class="fee-section">
+                        <div class="fee-toggle-area">
+                            <label class="fee-checkbox-label">
+                                <input type="checkbox" id="fee-checkbox">
+                                <span class="fee-checkmark"></span>
+                                <span class="fee-text">
+                                    <strong>Fee de Agencia</strong>
+                                    <small>Diseño 3D, renders, coordinación y gestión</small>
+                                </span>
+                            </label>
+                        </div>
+                        <div class="fee-input-area">
+                            <input type="number" id="fee-percentage-input" class="fee-input" value="10" min="0"
+                                max="100" step="1">
+                            <span class="fee-suffix">%</span>
+                        </div>
+                    </div>
+                </div>
+
+            </section>
+
+
+            <div class="section-divider">
+                <span>Selección de Items</span>
+            </div>
+
+            <div class="items-search-bar">
+                <div class="items-search-wrapper">
+                    <input type="text" id="items-search" placeholder="Buscar item..." autocomplete="off" spellcheck="false">
+                    <button class="items-search-clear" id="items-search-clear" title="Limpiar búsqueda" style="display:none">✕</button>
+                </div>
+            </div>
+
+            <div id="items-container" class="items-grid">
+                <!-- Category sections generated via JS -->
+            </div>
+
+            <footer class="app-footer">
+                <div class="footer-line"></div>
+            </footer>
+        </main>
+
+        <!-- ADMIN PANEL (hidden by default) -->
+        <div id="admin-panel" class="admin-panel">
+            <!-- Admin content generated via JS -->
+        </div>
+
+        <!-- RIGHT COLUMN: SUMMARY -->
+        <aside class="col-summary">
+            <div class="summary-card sticky-panel">
+                <h2>Resumen de Cotización</h2>
+
+                <div id="summary-list" class="summary-list">
+                    <!-- Summary items generated via JS -->
+                    <div class="empty-state">No hay items seleccionados</div>
+                </div>
+
+                <div class="totals-section">
+                    <div class="total-row">
+                        <span>Subtotal</span>
+                        <span id="subtotal-display">$0.00</span>
+                    </div>
+                    <div class="total-row">
+                        <span>IVA (21%)</span>
+                        <span id="tax-display">$0.00</span>
+                    </div>
+                    <div class="total-row grand-total">
+                        <span>TOTAL</span>
+                        <span id="total-display">$0.00</span>
+                    </div>
+                </div>
+
+                <div class="actions">
+                    <button id="btn-export" class="btn-primary">Exportar PDF</button>
+                    <button id="btn-reset" class="btn-secondary">Reiniciar</button>
+                </div>
+            </div>
+        </aside>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="api.js"></script>
+    <script src="database.js"></script>
+    <script src="autocomplete.js"></script>
+    <script src="quotation-storage.js"></script>
+    <script src="quotation-ui.js"></script>
+    <script src="script.js"></script>
+    <script>
+        // Reveal body after load
+        window.addEventListener('load', () => {
+            document.body.style.visibility = 'visible';
+        });
+    </script>
+</body>
+
+</html>
