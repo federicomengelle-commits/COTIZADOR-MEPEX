@@ -4,9 +4,11 @@
 // Módulo para conectar con el backend y Notion
 // =============================================
 
-const BASE_URL = window.location.hostname === 'localhost' 
-    ? 'http://localhost:3001/api'
-    : 'https://cotizador-mepex-production.up.railway.app/api';
+const API = {
+    // Configuración
+    baseUrl: window.location.hostname === 'localhost'
+        ? 'http://localhost:3001/api'
+        : 'https://cotizador-mepex-production.up.railway.app/api',
 
     // Estado de conexión
     isConnected: false,
