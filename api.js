@@ -6,7 +6,9 @@
 
 const API = {
     // Configuración
-    baseUrl: 'http://localhost:3001/api',
+    baseUrl: window.location.hostname === 'localhost'
+        ? 'http://localhost:3001/api'
+        : 'https://cotizador-mepex-production.up.railway.app/api',
 
     // Estado de conexión
     isConnected: false,
