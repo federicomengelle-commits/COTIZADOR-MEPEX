@@ -850,6 +850,73 @@ app.get('/api/events/search', async (req, res) => {
 });
 
 // =============================================
+// ENDPOINTS: COTIZACIONES — NEXT NUMBER
+// =============================================
+
+// Obtener el siguiente número de cotización basado en las existentes en Notion
+app.get('/api/cotizaciones/next-number', async (req, res) => {
+    try {
+        const currentYear = new Date().getFullYear();
+        const prefix = `COT-${currentYear}-`;
+        console.log(`🔢 Buscando siguiente número de cotización para ${currentYear}...`);
+
+        // Consultar cotizaciones cuyo Nombre empiece con COT-{año}-
+        let allNames = [];
+        let hasMore = true;
+        let startCursor = undefined;
+
+        while (hasMore) {
+            const response = await notion.databases.query({
+                database_id: QUOTATIONS_DB_ID,
+                start_cursor: startCursor,
+                page_size: 100,
+                filter: {
+                    property: 'Nombre',
+                    title: {
+                        starts_with: prefix
+                    }
+                }
+            });
+
+            const names = response.results.map(page => getTitle(page.properties['Nombre']));
+            allNames = allNames.concat(names);
+
+            hasMore = response.has_more;
+            startCursor = response.next_cursor;
+        }
+
+        // Parsear números secuenciales del formato COT-YYYY-NNNN
+        const regex = /^COT-(\d{4})-(\d{4})$/;
+        let maxSeq = 0;
+
+        allNames.forEach(name => {
+            const match = name.match(regex);
+            if (match && parseInt(match[1]) === currentYear) {
+                const seq = parseInt(match[2]);
+                if (seq > maxSeq) maxSeq = seq;
+            }
+        });
+
+        const nextSeq = maxSeq + 1;
+        const formatted = `COT-${currentYear}-${String(nextSeq).padStart(4, '0')}`;
+
+        console.log(`✅ Siguiente cotización: ${formatted} (${allNames.length} encontradas en ${currentYear})`);
+
+        res.json({
+            success: true,
+            year: currentYear,
+            next: nextSeq,
+            formatted,
+            existingCount: allNames.length
+        });
+
+    } catch (error) {
+        console.error('❌ Error obteniendo next-number:', error.message);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// =============================================
 // ENDPOINTS: COTIZACIONES
 // =============================================
 

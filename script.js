@@ -14,19 +14,19 @@
  *   "14 de Marzo 2026"           (sin endDate)
  */
 function formatEventDateRange(startDate, endDate) {
-    const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
-                   'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+    const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+        'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
     if (!startDate) return '';
-    const start     = new Date(startDate + 'T00:00:00');
-    const startDay  = start.getDate();
-    const startMes  = MESES[start.getMonth()];
+    const start = new Date(startDate + 'T00:00:00');
+    const startDay = start.getDate();
+    const startMes = MESES[start.getMonth()];
     const startYear = start.getFullYear();
 
     if (!endDate) return `${startDay} de ${startMes} ${startYear}`;
 
-    const end     = new Date(endDate + 'T00:00:00');
-    const endDay  = end.getDate();
-    const endMes  = MESES[end.getMonth()];
+    const end = new Date(endDate + 'T00:00:00');
+    const endDay = end.getDate();
+    const endMes = MESES[end.getMonth()];
     const endYear = end.getFullYear();
 
     if (start.getMonth() === end.getMonth() && startYear === endYear) {
@@ -765,7 +765,7 @@ const Render = {
         }
 
         const nameVenueEl = display.querySelector('.event-info-name-venue');
-        const datesEl     = display.querySelector('.event-info-dates');
+        const datesEl = display.querySelector('.event-info-dates');
 
         // Línea 1: "Nombre del evento — La Rural"
         let nameVenue = eventoData.name || '';
@@ -1342,12 +1342,24 @@ const Render = {
         const margin = 20;
         const contentWidth = pageWidth - (margin * 2);
 
-        // Número de cotización secuencial (persiste en localStorage)
+        // Número de cotización secuencial (Notion API-first, localStorage fallback)
+        let cotNumber;
         const currentYear = new Date().getFullYear();
-        const storageKey = `mepex_cot_seq_${currentYear}`;
-        let cotSeq = parseInt(localStorage.getItem(storageKey) || '0') + 1;
-        localStorage.setItem(storageKey, cotSeq.toString());
-        const cotNumber = `COT-${currentYear}-${String(cotSeq).padStart(4, '0')}`;
+        try {
+            if (typeof API !== 'undefined' && API.isConnected) {
+                const numData = await API.getNextQuotationNumber();
+                cotNumber = numData.formatted;
+                console.log(`🔢 Número de cotización obtenido de Notion: ${cotNumber}`);
+            } else {
+                throw new Error('API not available');
+            }
+        } catch (e) {
+            console.warn('⚠️ No se pudo obtener número de Notion, usando localStorage:', e.message);
+            const storageKey = `mepex_cot_seq_${currentYear}`;
+            let cotSeq = parseInt(localStorage.getItem(storageKey) || '0') + 1;
+            localStorage.setItem(storageKey, cotSeq.toString());
+            cotNumber = `COT-${currentYear}-${String(cotSeq).padStart(4, '0')}`;
+        }
 
         // Colores MEPEX (dark theme)
         const cyanColor = [0, 180, 213];
@@ -1388,11 +1400,11 @@ const Render = {
                     let height = img.naturalHeight;
                     if (width > maxWidth || height > maxHeight) {
                         const ratio = Math.min(maxWidth / width, maxHeight / height);
-                        width  = Math.round(width  * ratio);
+                        width = Math.round(width * ratio);
                         height = Math.round(height * ratio);
                     }
                     const canvas = document.createElement('canvas');
-                    canvas.width  = width;
+                    canvas.width = width;
                     canvas.height = height;
                     const ctx = canvas.getContext('2d');
                     ctx.drawImage(img, 0, 0, width, height);
@@ -1407,7 +1419,7 @@ const Render = {
         // logo_full: se muestra a 50×7mm → ~300×42px a 150dpi
         // mepex_iso: se muestra a 10×10mm → ~60×60px a 150dpi
         const logoFullData = await loadImageAsDataURL('assets/logo_full.png', 300, 50);
-        const isoData      = await loadImageAsDataURL('assets/mepex_iso.png',  80, 80);
+        const isoData = await loadImageAsDataURL('assets/mepex_iso.png', 80, 80);
 
         // ========================================
         // PAGE 1 - BACKGROUND
@@ -1472,9 +1484,9 @@ const Render = {
         const cliente = document.getElementById('input-cliente')?.value || 'No especificado';
         const proyecto = document.getElementById('input-proyecto')?.value || '';
         const evento = document.getElementById('input-evento')?.value || 'No especificado';
-        const eventoData     = State.generalParams.eventoData;
+        const eventoData = State.generalParams.eventoData;
         const fechaEventoStr = formatEventDateRange(eventoData?.eventStartDate, eventoData?.eventEndDate);
-        const venue          = eventoData?.venue || '';
+        const venue = eventoData?.venue || '';
         const tipoStand = params.standType.charAt(0).toUpperCase() + params.standType.slice(1);
         const isMultiSpace = State.isMultiSpaceMode();
 

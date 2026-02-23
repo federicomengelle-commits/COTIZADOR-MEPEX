@@ -391,6 +391,12 @@ const API = {
     // ENDPOINTS: COTIZACIONES
     // =============================================
 
+    // Obtener el siguiente número de cotización desde Notion
+    async getNextQuotationNumber() {
+        const response = await this.request('/cotizaciones/next-number');
+        return response; // { success, year, next, formatted, existingCount }
+    },
+
     async getQuotations() {
         try {
             const response = await this.request('/quotations');
