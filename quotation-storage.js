@@ -87,6 +87,22 @@ const QuotationStorage = {
         return this._getFromLocalStorageById(id);
     },
 
+    // Eliminar cotización
+    async deleteQuotation(id) {
+        // API-first
+        try {
+            if (typeof API !== 'undefined' && API.isConnected) {
+                await API.deleteQuotation(id);
+                console.log(`🗑️ Cotización ${id} eliminada de Supabase`);
+            }
+        } catch (e) {
+            console.warn('⚠️ No se pudo eliminar de Supabase:', e.message);
+        }
+
+        // También borrar de localStorage
+        this._deleteFromLocalStorage(id);
+    },
+
     // =============================================
     // FALLBACK: localStorage (privados)
     // =============================================
@@ -127,6 +143,15 @@ const QuotationStorage = {
     _getFromLocalStorageById(id) {
         const quotations = this._getFromLocalStorage();
         return quotations.find(q => q.id === id || q.cotNumber === id) || null;
+    },
+
+    _deleteFromLocalStorage(id) {
+        const quotations = this._getFromLocalStorage();
+        const filtered = quotations.filter(q => q.id !== id && q.cotNumber !== id);
+        try {
+            localStorage.setItem(this.STORAGE_KEY, JSON.stringify(filtered));
+            console.log(`💾 Cotización ${id} eliminada de localStorage`);
+        } catch (e) { /* silencioso */ }
     },
 
     // =============================================

@@ -2575,6 +2575,45 @@ input[type="checkbox"] {
     color: var(--color-primary);
 }
 
+/* Botón Ver PDF — naranja */
+.quot-btn-view {
+    font-family: var(--font-heading);
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 6px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    background: var(--color-secondary);
+    color: #000;
+    border: none;
+    transition: all 0.2s;
+}
+.quot-btn-view:hover {
+    background: #ff8c33;
+}
+
+/* Botón Eliminar — sutil, rojo en hover */
+.quot-btn-delete {
+    font-family: var(--font-heading);
+    font-size: 0.9rem;
+    font-weight: 600;
+    padding: 6px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    background: transparent;
+    color: var(--text-muted);
+    border: 1px solid transparent;
+    transition: all 0.2s;
+    line-height: 1;
+}
+.quot-btn-delete:hover {
+    color: #ff4444;
+    border-color: #ff4444;
+    background: rgba(255, 68, 68, 0.1);
+}
+
 /* Nav block for saved quotations */
 .nav-block-saved {
     margin-bottom: var(--spacing-lg);

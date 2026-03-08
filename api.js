@@ -442,6 +442,18 @@ const API = {
         }
     },
 
+    async deleteQuotation(id) {
+        try {
+            const response = await this.request(`/quotations/${id}`, {
+                method: 'DELETE'
+            });
+            return response;
+        } catch (error) {
+            console.error('❌ Error deleting quotation:', error.message);
+            throw error;
+        }
+    },
+
     // Subir PDF a Supabase Storage (multipart — NO usar this.request())
     async uploadPDF(pageId, blob, fileName) {
         const url = `${this.baseUrl}/quotations/${pageId}/pdf`;

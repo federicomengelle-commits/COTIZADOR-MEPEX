@@ -143,7 +143,8 @@ function formatQuotation(row) {
         total: parseFloat(row.monto_total) || 0,
         date: row.fecha_emision || null,
         createdAt: row.created_at,
-        updatedAt: row.updated_at
+        updatedAt: row.updated_at,
+        pdfUrl: row.pdf_url || null
     };
 }
 
@@ -666,6 +667,7 @@ app.get('/api/quotations/:id', async (req, res) => {
 
         const quotation = formatQuotation(data);
         quotation.fullState = data.full_state || null;
+        quotation.pdfUrl = data.pdf_url || null;
 
         res.json({ success: true, quotation });
 
@@ -814,6 +816,51 @@ app.post('/api/quotations/:id/pdf', upload.single('pdf'), async (req, res) => {
 
     } catch (error) {
         console.error('❌ Error subiendo PDF:', error.message);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// =============================================
+// DELETE QUOTATION
+// =============================================
+app.delete('/api/quotations/:id', async (req, res) => {
+    const { id } = req.params;
+    try {
+        console.log(`🗑️ Deleting quotation: ${id}`);
+
+        // 1. Obtener cotización para ver si tiene PDF
+        const { data: existing, error: fetchError } = await supabase
+            .from('cotizaciones')
+            .select('id, numero, pdf_url')
+            .eq('id', id)
+            .single();
+
+        if (fetchError || !existing) {
+            return res.status(404).json({ success: false, error: 'Cotización no encontrada' });
+        }
+
+        // 2. Borrar PDF del storage si existe
+        if (existing.pdf_url) {
+            const pdfPath = `${id}/${existing.numero}.pdf`;
+            console.log(`   📎 Removing PDF: ${pdfPath}`);
+            await supabase.storage
+                .from('cotizaciones-pdf')
+                .remove([pdfPath]);
+        }
+
+        // 3. Borrar cotización de la tabla
+        const { error } = await supabase
+            .from('cotizaciones')
+            .delete()
+            .eq('id', id);
+
+        if (error) throw error;
+
+        console.log(`✅ Quotation ${existing.numero || id} deleted`);
+        res.json({ success: true, deleted: id });
+
+    } catch (error) {
+        console.error('❌ Error deleting quotation:', error.message);
         res.status(500).json({ success: false, error: error.message });
     }
 });

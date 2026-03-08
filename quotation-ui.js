@@ -85,8 +85,10 @@ const QuotationUI = {
                         <span class="quot-row-date">${dateStr}</span>
                     </div>
                     <div class="quot-row-actions">
+                        ${q.pdfUrl ? `<button class="quot-btn-view" data-url="${q.pdfUrl}" title="Ver PDF">PDF</button>` : ''}
                         <button class="quot-btn-load" data-id="${q.id}">Cargar</button>
                         <button class="quot-btn-template" data-id="${q.id}">Usar como base</button>
+                        <button class="quot-btn-delete" data-id="${q.id}" data-name="${displayName}" title="Eliminar">✕</button>
                     </div>
                 </div>
             `;
@@ -99,6 +101,12 @@ const QuotationUI = {
         });
         body.querySelectorAll('.quot-btn-template').forEach(btn => {
             btn.addEventListener('click', () => this.loadAsTemplate(btn.dataset.id));
+        });
+        body.querySelectorAll('.quot-btn-view').forEach(btn => {
+            btn.addEventListener('click', () => window.open(btn.dataset.url, '_blank'));
+        });
+        body.querySelectorAll('.quot-btn-delete').forEach(btn => {
+            btn.addEventListener('click', () => this.deleteQuotation(btn.dataset.id, btn.dataset.name));
         });
     },
 
@@ -119,6 +127,20 @@ const QuotationUI = {
         } catch (e) {
             console.error('❌ Error cargando cotización:', e);
             alert('No se pudo cargar la cotización');
+        }
+    },
+
+    async deleteQuotation(id, name) {
+        if (!confirm(`¿Eliminar la cotización ${name}?`)) return;
+
+        try {
+            await QuotationStorage.deleteQuotation(id);
+            console.log(`🗑️ Cotización ${name} eliminada`);
+            // Refrescar la lista del modal
+            this.openModal();
+        } catch (e) {
+            console.error('❌ Error eliminando cotización:', e);
+            alert('No se pudo eliminar la cotización');
         }
     },
 
