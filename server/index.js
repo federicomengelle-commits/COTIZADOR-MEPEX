@@ -1,451 +1,255 @@
 // =============================================
-// MEPEX COTIZADOR - BACKEND API
+// MEPEX COTIZADOR - BACKEND API v2.0 (Supabase)
 // =============================================
-// Proxy seguro para conectar con Notion API
-// También sirve los archivos estáticos del frontend
+// Migrado de Notion a Supabase
+// Mismos endpoints, mismos response shapes
+// Tablas existentes con column mapping
 // =============================================
 
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-const { Client } = require('@notionhq/client');
+const { createClient } = require('@supabase/supabase-js');
 const multer = require('multer');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Inicializar cliente de Notion
-const notion = new Client({
-    auth: process.env.NOTION_TOKEN
-});
+// Inicializar cliente de Supabase
+const supabase = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_KEY
+);
 
 // Multer — almacenamiento en memoria para upload de PDFs
 const upload = multer({ storage: multer.memoryStorage() });
 
-// =============================================
-// DATABASE IDs
-// =============================================
-const DATABASE_ID = process.env.NOTION_DATABASE_ID;           // Catálogo de items
-const CLIENTS_DB_ID = process.env.NOTION_CLIENTS_DB_ID;       // Clientes
-const PROJECTS_DB_ID = process.env.NOTION_PROJECTS_DB_ID;     // Proyectos 2026
-const EVENTS_DB_ID = process.env.NOTION_EVENTS_DB_ID;         // Eventos 2026
-const QUOTATIONS_DB_ID = process.env.NOTION_QUOTATIONS_DB_ID; // Cotizaciones
-
-console.log('📊 Database IDs loaded:');
-console.log('   - Catalog:', DATABASE_ID?.substring(0, 8) + '...');
-console.log('   - Clients:', CLIENTS_DB_ID?.substring(0, 8) + '...');
-console.log('   - Projects:', PROJECTS_DB_ID?.substring(0, 8) + '...');
-console.log('   - Events:', EVENTS_DB_ID?.substring(0, 8) + '...');
-console.log('   - Quotations:', QUOTATIONS_DB_ID?.substring(0, 8) + '...');
+console.log('📊 Supabase connected:', process.env.SUPABASE_URL?.substring(0, 30) + '...');
 
 // Middleware
-// Permitir todas las origenes para desarrollo (incluyendo file://)
 app.use(cors({
     origin: function (origin, callback) {
-        // Permitir requests sin origin (como file:// o Postman)
         if (!origin) return callback(null, true);
-        // Permitir localhost en cualquier puerto
         if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
             return callback(null, true);
         }
-        return callback(null, true); // Permitir todo en desarrollo
+        if (origin.includes('vercel.app') || origin.includes('mepex')) {
+            return callback(null, true);
+        }
+        return callback(null, true);
     },
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     credentials: true
 }));
-app.use(express.json());
+
+app.use(express.json({ limit: '50mb' }));
+app.use(express.static(path.join(__dirname, '..')));
 
 // =============================================
-// SERVIR ARCHIVOS ESTÁTICOS DEL FRONTEND
+// FORMATTERS: row → response shape
 // =============================================
-// Servir la carpeta raíz del proyecto (donde está index.html)
-const frontendPath = path.join(__dirname, '..');
-app.use(express.static(frontendPath));
-console.log('📂 Serving static files from:', frontendPath);
+// Mapean columnas reales de Supabase al shape que espera el frontend
 
-// =============================================
-// UTILIDADES: Parsear propiedades de Notion
-// =============================================
-
-function getTitle(prop) {
-    if (!prop || !prop.title || prop.title.length === 0) return '';
-    return prop.title.map(t => t.plain_text).join('');
-}
-
-function getRichText(prop) {
-    if (!prop || !prop.rich_text || prop.rich_text.length === 0) return '';
-    return prop.rich_text.map(t => t.plain_text).join('');
-}
-
-function getSelect(prop) {
-    if (!prop || !prop.select) return null;
-    return prop.select.name;
-}
-
-function getStatus(prop) {
-    if (!prop || !prop.status) return null;
-    return prop.status.name;
-}
-
-function getMultiSelect(prop) {
-    if (!prop || !prop.multi_select || prop.multi_select.length === 0) return [];
-    return prop.multi_select.map(s => s.name);
-}
-
-function getNumber(prop) {
-    if (!prop || prop.number === null || prop.number === undefined) return 0;
-    return prop.number;
-}
-
-function getEmail(prop) {
-    if (!prop || !prop.email) return '';
-    return prop.email;
-}
-
-function getPhone(prop) {
-    if (!prop || !prop.phone_number) return '';
-    return prop.phone_number;
-}
-
-function getDate(prop) {
-    if (!prop || !prop.date || !prop.date.start) return null;
-    return prop.date.start;
-}
-
-function getRelation(prop) {
-    if (!prop || !prop.relation || prop.relation.length === 0) return [];
-    return prop.relation.map(r => r.id);
-}
-
-function getCheckbox(prop) {
-    if (!prop || prop.checkbox === null || prop.checkbox === undefined) return false;
-    return prop.checkbox === true;
-}
-
-// =============================================
-// PARSERS ESPECÍFICOS POR TIPO DE ENTIDAD
-// =============================================
-
-// Parser para items del catálogo
-function parseNotionItem(page) {
-    const props = page.properties;
-
-    // RUBRO es select (no multi_select) - categoría principal
-    const rubro = getSelect(props['RUBRO']) || '';
-
-    // Categoría es multi_select - etiquetas múltiples
-    const categorias = getMultiSelect(props['Categoría']);
-    const categoria = categorias.length > 0 ? categorias.join(', ') : '';
-
+// catalogo_items: id(int), codigo, nombre, rubro, categoria, descripcion, unidad, precio_cliente, favorito, activo
+function formatCatalogItem(row) {
     return {
-        id: page.id,
-        notionUrl: page.url,
-        // Campos de la DB usando nombres EXACTOS de Notion
-        name: getTitle(props['Item']),                     // PROPIEDAD: Item (SIN acento)
-        code: getRichText(props['Código']),                // PROPIEDAD: Código
-        description: getRichText(props['Descripción']),    // PROPIEDAD: Descripción
-        rubro: rubro,                                      // PROPIEDAD: RUBRO (select)
-        category: categoria,                               // PROPIEDAD: Categoría (select)
-        unit: getSelect(props['Unidad']),                  // PROPIEDAD: Unidad
-        price: getNumber(props['Importe']),                // PROPIEDAD: Importe (sin #)
-        favorite: getCheckbox(props['Favorito']),          // PROPIEDAD: Favorito (checkbox)
-        // Metadatos
-        createdAt: page.created_time,
-        updatedAt: page.last_edited_time
+        id: String(row.id),
+        notionUrl: null,
+        name: row.nombre || '',
+        code: row.codigo || '',
+        description: row.descripcion || '',
+        rubro: row.rubro || '',
+        category: row.categoria || '',
+        unit: row.unidad || null,
+        price: parseFloat(row.precio_cliente) || 0,
+        favorite: row.favorito || false,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at
     };
 }
 
-// Parser para clientes
-function parseClient(page) {
-    const props = page.properties;
-
+// clientes: id(uuid), nombre_empresa, razon_social, cuit, contacto_empresa, telefono, cargo, correo_electronico, rubro
+function formatClient(row) {
     return {
-        id: page.id,
-        notionUrl: page.url,
-        // Campos principales
-        name: getTitle(props['Nombre Empresa']),
-        razonSocial: getRichText(props['Razón Social']),
-        cuit: getNumber(props['CUIT']),
-        email: getEmail(props['Correo Electrónico']),
-        phone: getPhone(props['Teléfono']),
-        rubro: getMultiSelect(props['Rubro ']),
-        // Metadatos
-        createdAt: page.created_time,
-        updatedAt: page.last_edited_time
+        id: row.id,
+        notionUrl: null,
+        name: row.nombre_empresa || '',
+        razonSocial: row.razon_social || '',
+        cuit: row.cuit || 0,
+        email: row.correo_electronico || '',
+        phone: row.telefono || '',
+        rubro: row.rubro ? (Array.isArray(row.rubro) ? row.rubro : [row.rubro]) : [],
+        createdAt: row.created_at,
+        updatedAt: row.updated_at
     };
 }
 
-// Parser para proyectos
-function parseProject(page) {
-    const props = page.properties;
-
+// proyectos_2026: id(uuid), nombre, cliente_id, cliente_nombre, n_lote, evento_id, evento_nombre, estado, tipo, responsable, empresa
+function formatProject(row) {
     return {
-        id: page.id,
-        notionUrl: page.url,
-        // Campos principales
-        name: getTitle(props['Cliente']),  // El campo title en Proyectos se llama "Cliente"
-        number: getNumber(props['N° ']),
-        area: getRichText(props['Área']),
-        status: getStatus(props['Estado']),
-        requestDate: getDate(props['Fecha de solicitud']),
-        // Relaciones
-        clientId: getRelation(props['Empresa'])[0] || null,
-        eventId: getRelation(props['Eventos 2026-'])[0] || null,
-        // Metadatos
-        createdAt: page.created_time,
-        updatedAt: page.last_edited_time
+        id: row.id,
+        notionUrl: null,
+        name: row.nombre || '',
+        number: parseInt(row.n_lote) || 0,
+        area: '',
+        status: row.estado || null,
+        requestDate: null,
+        clientId: row.cliente_id || null,
+        eventId: row.evento_id || null,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at
     };
 }
 
-// Parser para eventos
-function parseEvent(page) {
-    const props = page.properties;
-
+// eventos_2026: id(uuid), nombre, lugar, fecha_armado_inicio, fecha_armado_fin, fecha_evento_inicio, fecha_evento_fin, fecha_desarme, prioridad, estado
+function formatEvent(row) {
     return {
-        id: page.id,
-        notionUrl: page.url,
-        // Campos principales
-        name: getTitle(props['Nombre']),
-        status: getSelect(props['Estado']),
-        setupDate: getDate(props['Fecha de armado']),
-        teardownDate: getDate(props['Fecha de desarme']),
-        phone: getPhone(props['Teléfono']),
-        pavilion: getMultiSelect(props['Pabellón']),
-        totalStands: getNumber(props['Stands totales']),
-        completedStands: getNumber(props['Stands terminados']),
-        priority: getSelect(props['Prioridad']),
-        // Fechas del evento (rango start → end)
-        eventStartDate: props['Fecha de evento']?.date?.start || null,
-        eventEndDate:   props['Fecha de evento']?.date?.end   || null,
-        // Lugar del evento
-        venue: getSelect(props['Lugar']),
-        // Relaciones
-        venueId: getRelation(props['Predio'])[0] || null,
-        // Metadatos
-        createdAt: page.created_time,
-        updatedAt: page.last_edited_time
+        id: row.id,
+        notionUrl: null,
+        name: row.nombre || '',
+        status: row.estado || null,
+        setupDate: row.fecha_armado_inicio || null,
+        teardownDate: row.fecha_desarme || null,
+        phone: '',
+        pavilion: [],
+        totalStands: 0,
+        completedStands: 0,
+        priority: row.prioridad || null,
+        eventStartDate: row.fecha_evento_inicio || null,
+        eventEndDate: row.fecha_evento_fin || null,
+        venue: row.lugar || null,
+        venueId: null,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at
     };
 }
 
-// Parser para cotizaciones
-function parseQuotation(page) {
-    const props = page.properties;
-
+// cotizaciones: id(uuid), numero, cliente_id, nombre_evento, tipo_evento, fecha_evento, monto_total, estado, vendedor_id, notas_internas
+//   + nuevas columnas: project_id, event_id, tipo_cotizacion, superficie, tipo_stand, altura, subtotal, iva, fecha_emision, full_state, pdf_url
+function formatQuotation(row) {
     return {
-        id: page.id,
-        notionUrl: page.url,
-        name: getTitle(props['Nombre']),
-        type: getSelect(props['Tipo']),
-        clientIds: getRelation(props['Clientes']),
-        projectIds: getRelation(props['Proyectos 2026']),
-        eventIds: getRelation(props['Eventos 2026']),
-        surface: getNumber(props['Superficie']),
-        standType: getSelect(props['Tipo Stand']),
-        height: getSelect(props['Altura']),
-        subtotal: getNumber(props['Subtotal']),
-        tax: getNumber(props['IVA']),
-        total: getNumber(props['Total']),
-        date: getDate(props['Fecha Emisión']),
-        createdAt: page.created_time,
-        updatedAt: page.last_edited_time
+        id: row.id,
+        notionUrl: null,
+        name: row.numero || '',
+        type: row.tipo_cotizacion || null,
+        clientIds: row.cliente_id ? [row.cliente_id] : [],
+        projectIds: row.project_id ? [row.project_id] : [],
+        eventIds: row.event_id ? [row.event_id] : [],
+        surface: parseFloat(row.superficie) || 0,
+        standType: row.tipo_stand || null,
+        height: row.altura || null,
+        subtotal: parseFloat(row.subtotal) || 0,
+        tax: parseFloat(row.iva) || 0,
+        total: parseFloat(row.monto_total) || 0,
+        date: row.fecha_emision || null,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at
     };
 }
 
 // =============================================
-// HELPERS: Cotizaciones — JSON body en code blocks
+// ENDPOINTS: HEALTH
 // =============================================
 
-// Dividir texto largo en chunks de max 2000 chars (límite Notion rich_text)
-function createRichTextChunks(text, maxLen = 2000) {
-    const chunks = [];
-    for (let i = 0; i < text.length; i += maxLen) {
-        chunks.push({ type: 'text', text: { content: text.substring(i, i + maxLen) } });
-    }
-    return chunks;
-}
-
-// Leer el code block del body de una página (contiene fullState JSON)
-async function getPageJsonBody(pageId) {
-    const response = await notion.blocks.children.list({ block_id: pageId, page_size: 100 });
-    const codeBlock = response.results.find(b => b.type === 'code');
-    if (!codeBlock) return null;
-
-    const text = codeBlock.code.rich_text.map(rt => rt.plain_text).join('');
-    try {
-        return JSON.parse(text);
-    } catch {
-        return null;
-    }
-}
-
-// Construir properties de Notion para cotización, capitalizando selects
-function buildQuotationProperties(data) {
-    // Mapa de capitalización para selects
-    const typeMap = { stand: 'Stand', expo: 'Expo', alquiler: 'Alquiler' };
-    const standTypeMap = { centro: 'Centro', esquina: 'Esquina', peninsula: 'Peninsula', isla: 'Isla' };
-    const heightMap = { 'estándar': 'Estándar', 'media': 'Media', 'plus': 'Plus', 'extra': 'Extra', 'máxima': 'Máxima' };
-
-    const props = {
-        'Nombre': { title: [{ text: { content: data.cotNumber || '' } }] },
-        'Superficie': { number: data.surface || 0 },
-        'Subtotal': { number: data.subtotal || 0 },
-        'IVA': { number: data.tax || 0 },
-        'Total': { number: data.total || 0 }
-    };
-
-    // Selects obligatorios
-    if (data.type) {
-        const val = typeMap[data.type.toLowerCase()] || data.type;
-        props['Tipo'] = { select: { name: val } };
-    }
-
-    // Selects opcionales — solo incluir si hay valor
-    if (data.standType) {
-        const val = standTypeMap[data.standType.toLowerCase()] || data.standType;
-        props['Tipo Stand'] = { select: { name: val } };
-    }
-    if (data.height) {
-        const val = heightMap[data.height.toLowerCase()] || data.height;
-        props['Altura'] = { select: { name: val } };
-    }
-
-    // Relations — solo incluir si hay ID
-    props['Clientes'] = { relation: data.clientId ? [{ id: data.clientId }] : [] };
-    props['Proyectos 2026'] = { relation: data.projectId ? [{ id: data.projectId }] : [] };
-    props['Eventos 2026'] = { relation: data.eventId ? [{ id: data.eventId }] : [] };
-
-    // Fecha
-    if (data.date) {
-        props['Fecha Emisión'] = { date: { start: data.date } };
-    }
-
-    return props;
-}
-
-// =============================================
-// ENDPOINTS
-// =============================================
-
-// Health check
 app.get('/api/health', (req, res) => {
     res.json({
         status: 'ok',
         timestamp: new Date().toISOString(),
-        version: '1.0.0'
+        version: '2.0.0'
     });
 });
 
-// Obtener todos los items del catálogo
+// =============================================
+// ENDPOINTS: CATÁLOGO (tabla: catalogo_items)
+// =============================================
+
 app.get('/api/catalog', async (req, res) => {
     try {
-        console.log('📦 Fetching catalog from Notion...');
+        console.log('📦 Fetching catalog from Supabase...');
 
-        let allItems = [];
-        let hasMore = true;
-        let startCursor = undefined;
+        const { data, error } = await supabase
+            .from('catalogo_items')
+            .select('*')
+            .eq('activo', true)
+            .order('nombre');
 
-        // Paginación para obtener todos los items
-        while (hasMore) {
-            const response = await notion.databases.query({
-                database_id: DATABASE_ID,
-                start_cursor: startCursor,
-                page_size: 100
-            });
+        if (error) throw error;
 
-            const items = response.results.map(parseNotionItem);
-            allItems = allItems.concat(items);
-
-            hasMore = response.has_more;
-            startCursor = response.next_cursor;
-        }
-
-        console.log(`✅ Fetched ${allItems.length} items from Notion`);
+        const items = data.map(formatCatalogItem);
+        console.log(`✅ Fetched ${items.length} items from Supabase`);
 
         res.json({
             success: true,
-            count: allItems.length,
-            items: allItems,
+            count: items.length,
+            items: items,
             timestamp: new Date().toISOString()
         });
 
     } catch (error) {
         console.error('❌ Error fetching catalog:', error.message);
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
+        res.status(500).json({ success: false, error: error.message });
     }
 });
 
-// Obtener estructura de la base de datos (categorías, unidades, etc.)
 app.get('/api/catalog/schema', async (req, res) => {
     try {
-        console.log('🔧 Fetching database schema...');
+        console.log('🔧 Fetching catalog schema...');
 
-        const database = await notion.databases.retrieve({
-            database_id: DATABASE_ID
-        });
+        const { data: items, error } = await supabase
+            .from('catalogo_items')
+            .select('rubro, categoria, unidad')
+            .eq('activo', true);
+
+        if (error) throw error;
+
+        const rubros = [...new Set(items.map(i => i.rubro).filter(Boolean))].sort();
+        const categorias = [...new Set(items.map(i => i.categoria).filter(Boolean))].sort();
+        const unidades = [...new Set(items.map(i => i.unidad).filter(Boolean))].sort();
 
         const schema = {
-            title: database.title.map(t => t.plain_text).join(''),
-            properties: {}
+            title: 'Catálogo de Items',
+            properties: {
+                'RUBRO': {
+                    type: 'select',
+                    name: 'RUBRO',
+                    options: rubros.map(r => ({ name: r, color: 'default' }))
+                },
+                'Categoría': {
+                    type: 'multi_select',
+                    name: 'Categoría',
+                    options: categorias.map(c => ({ name: c, color: 'default' }))
+                },
+                'Unidad': {
+                    type: 'select',
+                    name: 'Unidad',
+                    options: unidades.map(u => ({ name: u, color: 'default' }))
+                }
+            }
         };
 
-        // Extraer opciones de selects
-        for (const [key, prop] of Object.entries(database.properties)) {
-            schema.properties[key] = {
-                type: prop.type,
-                name: prop.name
-            };
-
-            if (prop.type === 'select' && prop.select?.options) {
-                schema.properties[key].options = prop.select.options.map(o => ({
-                    name: o.name,
-                    color: o.color
-                }));
-            }
-
-            if (prop.type === 'multi_select' && prop.multi_select?.options) {
-                schema.properties[key].options = prop.multi_select.options.map(o => ({
-                    name: o.name,
-                    color: o.color
-                }));
-            }
-        }
-
         console.log('✅ Schema retrieved successfully');
-        res.json({
-            success: true,
-            schema: schema
-        });
+        res.json({ success: true, schema });
 
     } catch (error) {
         console.error('❌ Error fetching schema:', error.message);
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
+        res.status(500).json({ success: false, error: error.message });
     }
 });
 
-// Obtener items por categoría
 app.get('/api/catalog/category/:category', async (req, res) => {
     try {
         const { category } = req.params;
         console.log(`📦 Fetching items for category: ${category}`);
 
-        const response = await notion.databases.query({
-            database_id: DATABASE_ID,
-            filter: {
-                property: 'Categoría',
-                multi_select: {
-                    contains: category
-                }
-            }
-        });
+        const { data, error } = await supabase
+            .from('catalogo_items')
+            .select('*')
+            .eq('activo', true)
+            .eq('categoria', category);
 
-        const items = response.results.map(parseNotionItem);
+        if (error) throw error;
+
+        const items = data.map(formatCatalogItem);
 
         res.json({
             success: true,
@@ -456,14 +260,10 @@ app.get('/api/catalog/category/:category', async (req, res) => {
 
     } catch (error) {
         console.error('❌ Error fetching category:', error.message);
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
+        res.status(500).json({ success: false, error: error.message });
     }
 });
 
-// Actualizar precio de un item (para modo admin)
 app.put('/api/catalog/:itemId', async (req, res) => {
     try {
         const { itemId } = req.params;
@@ -471,426 +271,308 @@ app.put('/api/catalog/:itemId', async (req, res) => {
 
         console.log(`✏️ Updating item: ${itemId}`);
 
-        const updateData = { page_id: itemId, properties: {} };
-
-        if (price !== undefined) {
-            updateData.properties.Importe = { number: price };
-        }
-        if (name !== undefined) {
-            updateData.properties.Item = { title: [{ text: { content: name } }] };
-        }
-        if (description !== undefined) {
-            updateData.properties['Descripción'] = { rich_text: [{ text: { content: description } }] };
-        }
-        if (unit !== undefined) {
-            updateData.properties.Unidad = { select: { name: unit } };
-        }
+        const updateData = {};
+        if (price !== undefined) updateData.precio_cliente = price;
+        if (name !== undefined) updateData.nombre = name;
+        if (description !== undefined) updateData.descripcion = description;
+        if (unit !== undefined) updateData.unidad = unit;
         if (category !== undefined) {
-            updateData.properties['Categoría'] = {
-                multi_select: Array.isArray(category)
-                    ? category.map(c => ({ name: c }))
-                    : [{ name: category }]
-            };
+            updateData.categoria = Array.isArray(category) ? category.join(', ') : category;
         }
 
-        const response = await notion.pages.update(updateData);
-        const updatedItem = parseNotionItem(response);
+        const { data, error } = await supabase
+            .from('catalogo_items')
+            .update(updateData)
+            .eq('id', parseInt(itemId))
+            .select()
+            .single();
+
+        if (error) throw error;
 
         console.log('✅ Item updated successfully');
-        res.json({
-            success: true,
-            item: updatedItem
-        });
+        res.json({ success: true, item: formatCatalogItem(data) });
 
     } catch (error) {
         console.error('❌ Error updating item:', error.message);
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
+        res.status(500).json({ success: false, error: error.message });
     }
 });
 
-// Crear nuevo item
 app.post('/api/catalog', async (req, res) => {
     try {
         const { name, code, description, category, unit, price } = req.body;
 
         console.log(`➕ Creating new item: ${name}`);
 
-        const response = await notion.pages.create({
-            parent: { database_id: DATABASE_ID },
-            properties: {
-                Item: { title: [{ text: { content: name || '' } }] },
-                'Código': { rich_text: [{ text: { content: code || '' } }] },
-                'Descripción': { rich_text: [{ text: { content: description || '' } }] },
-                'Categoría': {
-                    multi_select: Array.isArray(category)
-                        ? category.map(c => ({ name: c }))
-                        : category ? [{ name: category }] : []
-                },
-                Unidad: unit ? { select: { name: unit } } : undefined,
-                Importe: { number: price || 0 }
-            }
-        });
+        const newRow = {
+            nombre: name || '',
+            codigo: code || '',
+            descripcion: description || '',
+            categoria: Array.isArray(category) ? category.join(', ') : (category || ''),
+            unidad: unit || null,
+            precio_cliente: price || 0,
+            favorito: false,
+            activo: true
+        };
 
-        const newItem = parseNotionItem(response);
+        const { data, error } = await supabase
+            .from('catalogo_items')
+            .insert(newRow)
+            .select()
+            .single();
+
+        if (error) throw error;
 
         console.log('✅ Item created successfully');
-        res.json({
-            success: true,
-            item: newItem
-        });
+        res.json({ success: true, item: formatCatalogItem(data) });
 
     } catch (error) {
         console.error('❌ Error creating item:', error.message);
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
+        res.status(500).json({ success: false, error: error.message });
     }
 });
 
 // =============================================
-// ENDPOINTS: CLIENTES
+// ENDPOINTS: CLIENTES (tabla: clientes)
 // =============================================
 
-// Obtener todos los clientes
 app.get('/api/clients', async (req, res) => {
     try {
-        console.log('👥 Fetching clients from Notion...');
+        console.log('👥 Fetching clients from Supabase...');
 
-        let allClients = [];
-        let hasMore = true;
-        let startCursor = undefined;
+        const { data, error } = await supabase
+            .from('clientes')
+            .select('*')
+            .order('nombre_empresa');
 
-        while (hasMore) {
-            const response = await notion.databases.query({
-                database_id: CLIENTS_DB_ID,
-                start_cursor: startCursor,
-                page_size: 100
-            });
+        if (error) throw error;
 
-            const clients = response.results.map(parseClient);
-            allClients = allClients.concat(clients);
-
-            hasMore = response.has_more;
-            startCursor = response.next_cursor;
-        }
-
-        console.log(`✅ Fetched ${allClients.length} clients`);
+        const clients = data.map(formatClient);
+        console.log(`✅ Fetched ${clients.length} clients`);
 
         res.json({
             success: true,
-            count: allClients.length,
-            clients: allClients,
+            count: clients.length,
+            clients: clients,
             timestamp: new Date().toISOString()
         });
 
     } catch (error) {
         console.error('❌ Error fetching clients:', error.message);
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
+        res.status(500).json({ success: false, error: error.message });
     }
 });
 
-// Buscar clientes (para autocompletado)
 app.get('/api/clients/search', async (req, res) => {
     try {
         const { q } = req.query;
         console.log(`🔍 Searching clients for: "${q}"`);
 
         if (!q || q.length < 2) {
-            return res.json({
-                success: true,
-                results: []
-            });
+            return res.json({ success: true, results: [] });
         }
 
-        const response = await notion.databases.query({
-            database_id: CLIENTS_DB_ID,
-            filter: {
-                property: 'Nombre Empresa',
-                title: {
-                    contains: q
-                }
-            },
-            page_size: 10
-        });
+        const { data, error } = await supabase
+            .from('clientes')
+            .select('*')
+            .ilike('nombre_empresa', `%${q}%`)
+            .limit(10);
 
-        const clients = response.results.map(parseClient);
+        if (error) throw error;
 
-        res.json({
-            success: true,
-            results: clients
-        });
+        res.json({ success: true, results: data.map(formatClient) });
 
     } catch (error) {
         console.error('❌ Error searching clients:', error.message);
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
+        res.status(500).json({ success: false, error: error.message });
     }
 });
 
 // =============================================
-// ENDPOINTS: PROYECTOS
+// ENDPOINTS: PROYECTOS (tabla: proyectos_2026)
 // =============================================
 
-// Obtener todos los proyectos
 app.get('/api/projects', async (req, res) => {
     try {
-        console.log('📁 Fetching projects from Notion...');
+        console.log('📁 Fetching projects from Supabase...');
 
-        let allProjects = [];
-        let hasMore = true;
-        let startCursor = undefined;
+        const { data, error } = await supabase
+            .from('proyectos_2026')
+            .select('*')
+            .order('created_at', { ascending: false });
 
-        while (hasMore) {
-            const response = await notion.databases.query({
-                database_id: PROJECTS_DB_ID,
-                start_cursor: startCursor,
-                page_size: 100
-            });
+        if (error) throw error;
 
-            const projects = response.results.map(parseProject);
-            allProjects = allProjects.concat(projects);
-
-            hasMore = response.has_more;
-            startCursor = response.next_cursor;
-        }
-
-        console.log(`✅ Fetched ${allProjects.length} projects`);
+        const projects = data.map(formatProject);
+        console.log(`✅ Fetched ${projects.length} projects`);
 
         res.json({
             success: true,
-            count: allProjects.length,
-            projects: allProjects,
+            count: projects.length,
+            projects: projects,
             timestamp: new Date().toISOString()
         });
 
     } catch (error) {
         console.error('❌ Error fetching projects:', error.message);
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
+        res.status(500).json({ success: false, error: error.message });
     }
 });
 
-// Buscar proyectos (para autocompletado)
 app.get('/api/projects/search', async (req, res) => {
     try {
         const { q } = req.query;
         console.log(`🔍 Searching projects for: "${q}"`);
 
         if (!q || q.length < 2) {
-            return res.json({
-                success: true,
-                results: []
-            });
+            return res.json({ success: true, results: [] });
         }
 
-        const response = await notion.databases.query({
-            database_id: PROJECTS_DB_ID,
-            filter: {
-                property: 'Cliente',
-                title: {
-                    contains: q
-                }
-            },
-            page_size: 10
-        });
+        const { data, error } = await supabase
+            .from('proyectos_2026')
+            .select('*')
+            .ilike('nombre', `%${q}%`)
+            .limit(10);
 
-        const projects = response.results.map(parseProject);
+        if (error) throw error;
 
-        res.json({
-            success: true,
-            results: projects
-        });
+        res.json({ success: true, results: data.map(formatProject) });
 
     } catch (error) {
         console.error('❌ Error searching projects:', error.message);
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
+        res.status(500).json({ success: false, error: error.message });
     }
 });
 
-// Obtener un proyecto específico con sus relaciones
 app.get('/api/projects/:projectId', async (req, res) => {
     try {
         const { projectId } = req.params;
         console.log(`📁 Fetching project: ${projectId}`);
 
-        const projectPage = await notion.pages.retrieve({ page_id: projectId });
-        const project = parseProject(projectPage);
+        const { data: projectRow, error } = await supabase
+            .from('proyectos_2026')
+            .select('*')
+            .eq('id', projectId)
+            .single();
 
-        // Si el proyecto tiene un cliente relacionado, obtenerlo
+        if (error) throw error;
+
+        const project = formatProject(projectRow);
+
+        // Obtener cliente relacionado
         if (project.clientId) {
             try {
-                const clientPage = await notion.pages.retrieve({ page_id: project.clientId });
-                project.client = parseClient(clientPage);
+                const { data: clientRow } = await supabase
+                    .from('clientes')
+                    .select('*')
+                    .eq('id', project.clientId)
+                    .single();
+                if (clientRow) project.client = formatClient(clientRow);
             } catch (e) {
                 console.warn('⚠️ Could not fetch related client:', e.message);
             }
         }
 
-        // Si el proyecto tiene un evento relacionado, obtenerlo
+        // Obtener evento relacionado
         if (project.eventId) {
             try {
-                const eventPage = await notion.pages.retrieve({ page_id: project.eventId });
-                project.event = parseEvent(eventPage);
+                const { data: eventRow } = await supabase
+                    .from('eventos_2026')
+                    .select('*')
+                    .eq('id', project.eventId)
+                    .single();
+                if (eventRow) project.event = formatEvent(eventRow);
             } catch (e) {
                 console.warn('⚠️ Could not fetch related event:', e.message);
             }
         }
 
-        res.json({
-            success: true,
-            project: project
-        });
+        res.json({ success: true, project });
 
     } catch (error) {
         console.error('❌ Error fetching project:', error.message);
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
+        res.status(500).json({ success: false, error: error.message });
     }
 });
 
 // =============================================
-// ENDPOINTS: EVENTOS
+// ENDPOINTS: EVENTOS (tabla: eventos_2026)
 // =============================================
 
-// Obtener todos los eventos
 app.get('/api/events', async (req, res) => {
     try {
-        console.log('📅 Fetching events from Notion...');
+        console.log('📅 Fetching events from Supabase...');
 
-        let allEvents = [];
-        let hasMore = true;
-        let startCursor = undefined;
+        const { data, error } = await supabase
+            .from('eventos_2026')
+            .select('*')
+            .order('fecha_evento_inicio', { ascending: true, nullsFirst: false });
 
-        while (hasMore) {
-            const response = await notion.databases.query({
-                database_id: EVENTS_DB_ID,
-                start_cursor: startCursor,
-                page_size: 100
-            });
+        if (error) throw error;
 
-            const events = response.results.map(parseEvent);
-            allEvents = allEvents.concat(events);
-
-            hasMore = response.has_more;
-            startCursor = response.next_cursor;
-        }
-
-        console.log(`✅ Fetched ${allEvents.length} events`);
+        const events = data.map(formatEvent);
+        console.log(`✅ Fetched ${events.length} events`);
 
         res.json({
             success: true,
-            count: allEvents.length,
-            events: allEvents,
+            count: events.length,
+            events: events,
             timestamp: new Date().toISOString()
         });
 
     } catch (error) {
         console.error('❌ Error fetching events:', error.message);
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
+        res.status(500).json({ success: false, error: error.message });
     }
 });
 
-// Buscar eventos (para autocompletado)
 app.get('/api/events/search', async (req, res) => {
     try {
         const { q } = req.query;
         console.log(`🔍 Searching events for: "${q}"`);
 
         if (!q || q.length < 2) {
-            return res.json({
-                success: true,
-                results: []
-            });
+            return res.json({ success: true, results: [] });
         }
 
-        const response = await notion.databases.query({
-            database_id: EVENTS_DB_ID,
-            filter: {
-                property: 'Nombre',
-                title: {
-                    contains: q
-                }
-            },
-            page_size: 10
-        });
+        const { data, error } = await supabase
+            .from('eventos_2026')
+            .select('*')
+            .ilike('nombre', `%${q}%`)
+            .limit(10);
 
-        const events = response.results.map(parseEvent);
+        if (error) throw error;
 
-        res.json({
-            success: true,
-            results: events
-        });
+        res.json({ success: true, results: data.map(formatEvent) });
 
     } catch (error) {
         console.error('❌ Error searching events:', error.message);
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
+        res.status(500).json({ success: false, error: error.message });
     }
 });
 
 // =============================================
-// ENDPOINTS: COTIZACIONES — NEXT NUMBER
+// ENDPOINTS: COTIZACIONES — NEXT NUMBER (tabla: cotizaciones)
 // =============================================
 
-// Obtener el siguiente número de cotización basado en las existentes en Notion
 app.get('/api/cotizaciones/next-number', async (req, res) => {
     try {
         const currentYear = new Date().getFullYear();
         const prefix = `COT-${currentYear}-`;
         console.log(`🔢 Buscando siguiente número de cotización para ${currentYear}...`);
 
-        // Consultar cotizaciones cuyo Nombre empiece con COT-{año}-
-        let allNames = [];
-        let hasMore = true;
-        let startCursor = undefined;
+        const { data, error } = await supabase
+            .from('cotizaciones')
+            .select('numero')
+            .like('numero', `${prefix}%`);
 
-        while (hasMore) {
-            const response = await notion.databases.query({
-                database_id: QUOTATIONS_DB_ID,
-                start_cursor: startCursor,
-                page_size: 100,
-                filter: {
-                    property: 'Nombre',
-                    title: {
-                        starts_with: prefix
-                    }
-                }
-            });
+        if (error) throw error;
 
-            const names = response.results.map(page => getTitle(page.properties['Nombre']));
-            allNames = allNames.concat(names);
-
-            hasMore = response.has_more;
-            startCursor = response.next_cursor;
-        }
-
-        // Parsear números secuenciales del formato COT-YYYY-NNNN
         const regex = /^COT-(\d{4})-(\d{4})$/;
         let maxSeq = 0;
 
-        allNames.forEach(name => {
-            const match = name.match(regex);
+        (data || []).forEach(row => {
+            const match = row.numero?.match(regex);
             if (match && parseInt(match[1]) === currentYear) {
                 const seq = parseInt(match[2]);
                 if (seq > maxSeq) maxSeq = seq;
@@ -900,14 +582,14 @@ app.get('/api/cotizaciones/next-number', async (req, res) => {
         const nextSeq = maxSeq + 1;
         const formatted = `COT-${currentYear}-${String(nextSeq).padStart(4, '0')}`;
 
-        console.log(`✅ Siguiente cotización: ${formatted} (${allNames.length} encontradas en ${currentYear})`);
+        console.log(`✅ Siguiente cotización: ${formatted} (${(data || []).length} encontradas en ${currentYear})`);
 
         res.json({
             success: true,
             year: currentYear,
             next: nextSeq,
             formatted,
-            existingCount: allNames.length
+            existingCount: (data || []).length
         });
 
     } catch (error) {
@@ -917,39 +599,28 @@ app.get('/api/cotizaciones/next-number', async (req, res) => {
 });
 
 // =============================================
-// ENDPOINTS: COTIZACIONES
+// ENDPOINTS: COTIZACIONES (tabla: cotizaciones)
 // =============================================
 
-// Listar cotizaciones (solo properties, sin body JSON)
+// Listar cotizaciones (sin fullState)
 app.get('/api/quotations', async (req, res) => {
     try {
-        console.log('📋 Fetching quotations from Notion...');
+        console.log('📋 Fetching quotations from Supabase...');
 
-        let allQuotations = [];
-        let hasMore = true;
-        let startCursor = undefined;
+        const { data, error } = await supabase
+            .from('cotizaciones')
+            .select('id, numero, tipo_cotizacion, cliente_id, project_id, event_id, superficie, tipo_stand, altura, subtotal, iva, monto_total, fecha_emision, pdf_url, created_at, updated_at')
+            .order('fecha_emision', { ascending: false, nullsFirst: false });
 
-        while (hasMore) {
-            const response = await notion.databases.query({
-                database_id: QUOTATIONS_DB_ID,
-                start_cursor: startCursor,
-                page_size: 100,
-                sorts: [{ property: 'Fecha Emisión', direction: 'descending' }]
-            });
+        if (error) throw error;
 
-            const quotations = response.results.map(parseQuotation);
-            allQuotations = allQuotations.concat(quotations);
-
-            hasMore = response.has_more;
-            startCursor = response.next_cursor;
-        }
-
-        console.log(`✅ Fetched ${allQuotations.length} quotations`);
+        const quotations = data.map(formatQuotation);
+        console.log(`✅ Fetched ${quotations.length} quotations`);
 
         res.json({
             success: true,
-            count: allQuotations.length,
-            quotations: allQuotations,
+            count: quotations.length,
+            quotations: quotations,
             timestamp: new Date().toISOString()
         });
 
@@ -959,23 +630,24 @@ app.get('/api/quotations', async (req, res) => {
     }
 });
 
-// Obtener cotización completa (properties + fullState del body)
+// Obtener cotización completa (con fullState)
 app.get('/api/quotations/:id', async (req, res) => {
     try {
         const { id } = req.params;
         console.log(`📋 Fetching quotation: ${id}`);
 
-        const page = await notion.pages.retrieve({ page_id: id });
-        const quotation = parseQuotation(page);
+        const { data, error } = await supabase
+            .from('cotizaciones')
+            .select('*')
+            .eq('id', id)
+            .single();
 
-        // Leer el JSON del body (code block)
-        const fullState = await getPageJsonBody(id);
-        quotation.fullState = fullState;
+        if (error) throw error;
 
-        res.json({
-            success: true,
-            quotation
-        });
+        const quotation = formatQuotation(data);
+        quotation.fullState = data.full_state || null;
+
+        res.json({ success: true, quotation });
 
     } catch (error) {
         console.error('❌ Error fetching quotation:', error.message);
@@ -989,34 +661,39 @@ app.post('/api/quotations', async (req, res) => {
         const data = req.body;
         console.log(`➕ Creating quotation: ${data.cotNumber}`);
 
-        const properties = buildQuotationProperties(data);
+        // Mapas de capitalización (compatibilidad con frontend)
+        const typeMap = { stand: 'Stand', expo: 'Expo', alquiler: 'Alquiler' };
+        const standTypeMap = { centro: 'Centro', esquina: 'Esquina', peninsula: 'Peninsula', isla: 'Isla' };
+        const heightMap = { 'estándar': 'Estándar', 'media': 'Media', 'plus': 'Plus', 'extra': 'Extra', 'máxima': 'Máxima' };
 
-        // Crear página con properties + code block con fullState
-        const children = [];
-        if (data.fullState) {
-            children.push({
-                object: 'block',
-                type: 'code',
-                code: {
-                    rich_text: createRichTextChunks(JSON.stringify(data.fullState)),
-                    language: 'json'
-                }
-            });
-        }
+        const row = {
+            numero: data.cotNumber || '',
+            tipo_cotizacion: data.type ? (typeMap[data.type.toLowerCase()] || data.type) : null,
+            cliente_id: data.clientId || null,
+            project_id: data.projectId || null,
+            event_id: data.eventId || null,
+            superficie: data.surface || 0,
+            tipo_stand: data.standType ? (standTypeMap[data.standType.toLowerCase()] || data.standType) : null,
+            altura: data.height ? (heightMap[data.height.toLowerCase()] || data.height) : null,
+            subtotal: data.subtotal || 0,
+            iva: data.tax || 0,
+            monto_total: data.total || 0,
+            fecha_emision: data.date || null,
+            full_state: data.fullState || null
+        };
 
-        const response = await notion.pages.create({
-            parent: { database_id: QUOTATIONS_DB_ID },
-            properties,
-            children
-        });
+        const { data: inserted, error } = await supabase
+            .from('cotizaciones')
+            .insert(row)
+            .select()
+            .single();
 
-        const quotation = parseQuotation(response);
+        if (error) throw error;
+
+        const quotation = formatQuotation(inserted);
         console.log(`✅ Quotation created: ${quotation.name} (${quotation.id})`);
 
-        res.json({
-            success: true,
-            quotation
-        });
+        res.json({ success: true, quotation });
 
     } catch (error) {
         console.error('❌ Error creating quotation:', error.message);
@@ -1031,44 +708,38 @@ app.put('/api/quotations/:id', async (req, res) => {
         const data = req.body;
         console.log(`✏️ Updating quotation: ${id}`);
 
-        const properties = buildQuotationProperties(data);
+        const typeMap = { stand: 'Stand', expo: 'Expo', alquiler: 'Alquiler' };
+        const standTypeMap = { centro: 'Centro', esquina: 'Esquina', peninsula: 'Peninsula', isla: 'Isla' };
+        const heightMap = { 'estándar': 'Estándar', 'media': 'Media', 'plus': 'Plus', 'extra': 'Extra', 'máxima': 'Máxima' };
 
-        // Actualizar properties
-        const response = await notion.pages.update({
-            page_id: id,
-            properties
-        });
+        const updateData = {};
+        if (data.cotNumber !== undefined) updateData.numero = data.cotNumber;
+        if (data.type !== undefined) updateData.tipo_cotizacion = typeMap[data.type.toLowerCase()] || data.type;
+        if (data.clientId !== undefined) updateData.cliente_id = data.clientId || null;
+        if (data.projectId !== undefined) updateData.project_id = data.projectId || null;
+        if (data.eventId !== undefined) updateData.event_id = data.eventId || null;
+        if (data.surface !== undefined) updateData.superficie = data.surface;
+        if (data.standType !== undefined) updateData.tipo_stand = standTypeMap[data.standType.toLowerCase()] || data.standType;
+        if (data.height !== undefined) updateData.altura = heightMap[data.height.toLowerCase()] || data.height;
+        if (data.subtotal !== undefined) updateData.subtotal = data.subtotal;
+        if (data.tax !== undefined) updateData.iva = data.tax;
+        if (data.total !== undefined) updateData.monto_total = data.total;
+        if (data.date !== undefined) updateData.fecha_emision = data.date;
+        if (data.fullState !== undefined) updateData.full_state = data.fullState;
 
-        // Actualizar body (code block) si se envía fullState
-        if (data.fullState) {
-            // Buscar code block existente y borrarlo
-            const blocks = await notion.blocks.children.list({ block_id: id, page_size: 100 });
-            const codeBlock = blocks.results.find(b => b.type === 'code');
-            if (codeBlock) {
-                await notion.blocks.delete({ block_id: codeBlock.id });
-            }
+        const { data: updated, error } = await supabase
+            .from('cotizaciones')
+            .update(updateData)
+            .eq('id', id)
+            .select()
+            .single();
 
-            // Agregar nuevo code block
-            await notion.blocks.children.append({
-                block_id: id,
-                children: [{
-                    object: 'block',
-                    type: 'code',
-                    code: {
-                        rich_text: createRichTextChunks(JSON.stringify(data.fullState)),
-                        language: 'json'
-                    }
-                }]
-            });
-        }
+        if (error) throw error;
 
-        const quotation = parseQuotation(response);
+        const quotation = formatQuotation(updated);
         console.log(`✅ Quotation updated: ${quotation.name}`);
 
-        res.json({
-            success: true,
-            quotation
-        });
+        res.json({ success: true, quotation });
 
     } catch (error) {
         console.error('❌ Error updating quotation:', error.message);
@@ -1077,79 +748,52 @@ app.put('/api/quotations/:id', async (req, res) => {
 });
 
 // =============================================
-// PDF UPLOAD — Sube PDF a Notion (Files & Media)
+// PDF UPLOAD — Supabase Storage (bucket: cotizaciones-pdf)
 // =============================================
 app.post('/api/quotations/:id/pdf', upload.single('pdf'), async (req, res) => {
-    const pageId = req.params.id;
+    const quotationId = req.params.id;
 
     if (!req.file) {
         return res.status(400).json({ success: false, error: 'No se recibió archivo PDF' });
     }
 
-    const fileName = req.file.originalname || `cotizacion-${pageId}.pdf`;
+    const fileName = req.file.originalname || `cotizacion-${quotationId}.pdf`;
+    const filePath = `${quotationId}/${fileName}`;
     const fileBuffer = req.file.buffer;
-    const NOTION_VERSION = '2022-06-28';
-    const notionToken = process.env.NOTION_TOKEN;
 
     try {
-        // Paso 1: Crear file_upload en Notion
-        const createResp = await fetch('https://api.notion.com/v1/file_uploads', {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${notionToken}`,
-                'Notion-Version': NOTION_VERSION,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ filename: fileName })
-        });
+        console.log(`📎 Uploading PDF: ${fileName} for quotation ${quotationId}`);
 
-        if (!createResp.ok) {
-            const err = await createResp.text();
-            throw new Error(`file_uploads create failed: ${err}`);
-        }
+        // Subir a Supabase Storage
+        const { error: uploadError } = await supabase.storage
+            .from('cotizaciones-pdf')
+            .upload(filePath, fileBuffer, {
+                contentType: 'application/pdf',
+                upsert: true
+            });
 
-        const { id: fileUploadId } = await createResp.json();
-        console.log(`📎 Notion file_upload id: ${fileUploadId}`);
+        if (uploadError) throw uploadError;
 
-        // Paso 2: Enviar el binario a Notion
-        const formData = new FormData();
-        formData.append('file', new Blob([fileBuffer], { type: 'application/pdf' }), fileName);
+        // Obtener URL pública
+        const { data: urlData } = supabase.storage
+            .from('cotizaciones-pdf')
+            .getPublicUrl(filePath);
 
-        const sendResp = await fetch(`https://api.notion.com/v1/file_uploads/${fileUploadId}/send`, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${notionToken}`,
-                'Notion-Version': NOTION_VERSION
-                // NO poner Content-Type — FormData lo pone automáticamente con el boundary
-            },
-            body: formData
-        });
+        const publicUrl = urlData.publicUrl;
 
-        if (!sendResp.ok) {
-            const err = await sendResp.text();
-            throw new Error(`file_uploads send failed: ${err}`);
-        }
+        // Guardar URL en la cotización
+        const { error: updateError } = await supabase
+            .from('cotizaciones')
+            .update({ pdf_url: publicUrl })
+            .eq('id', quotationId);
 
-        console.log(`✅ PDF enviado a Notion file_uploads (${fileUploadId})`);
+        if (updateError) throw updateError;
 
-        // Paso 3: Actualizar la propiedad "PDF" de la página de cotización
-        await notion.pages.update({
-            page_id: pageId,
-            properties: {
-                'PDF': {
-                    files: [{
-                        type: 'file_upload',
-                        file_upload: { id: fileUploadId }
-                    }]
-                }
-            }
-        });
-
-        console.log(`☁️ PDF adjuntado a cotización ${pageId} en Notion`);
-        res.json({ success: true, fileUploadId });
+        console.log(`✅ PDF uploaded and linked to quotation ${quotationId}`);
+        res.json({ success: true, fileUploadId: filePath, pdfUrl: publicUrl });
 
     } catch (error) {
-        console.error('❌ Error subiendo PDF a Notion:', error.message);
+        console.error('❌ Error subiendo PDF:', error.message);
         res.status(500).json({ success: false, error: error.message });
     }
 });
@@ -1160,15 +804,10 @@ app.post('/api/quotations/:id/pdf', upload.single('pdf'), async (req, res) => {
 app.listen(PORT, () => {
     console.log('');
     console.log('🚀 ═══════════════════════════════════════════');
-    console.log('   MEPEX COTIZADOR API');
+    console.log('   MEPEX COTIZADOR API v2.0 (Supabase)');
     console.log('═══════════════════════════════════════════════');
     console.log(`   ✅ Server running at http://localhost:${PORT}`);
-    console.log(`   📦 Database IDs:`);
-    console.log(`      - Catalog:  ${DATABASE_ID?.substring(0, 8)}...`);
-    console.log(`      - Clients:  ${CLIENTS_DB_ID?.substring(0, 8)}...`);
-    console.log(`      - Projects: ${PROJECTS_DB_ID?.substring(0, 8)}...`);
-    console.log(`      - Events:   ${EVENTS_DB_ID?.substring(0, 8)}...`);
-    console.log(`      - Quotes:   ${QUOTATIONS_DB_ID?.substring(0, 8)}...`);
+    console.log(`   🔗 Supabase: ${process.env.SUPABASE_URL?.substring(0, 40)}...`);
     console.log('   📍 Endpoints:');
     console.log('      GET  /api/health              - Health check');
     console.log('      GET  /api/catalog             - Get all items');
@@ -1183,11 +822,13 @@ app.listen(PORT, () => {
     console.log('      GET  /api/projects/:id        - Get project + relations');
     console.log('      GET  /api/events              - Get all events');
     console.log('      GET  /api/events/search?q=    - Search events');
-    console.log('      GET  /api/quotations           - List quotations');
-    console.log('      GET  /api/quotations/:id       - Get quotation + state');
-    console.log('      POST /api/quotations           - Create quotation');
-    console.log('      PUT  /api/quotations/:id       - Update quotation');
-    console.log('      POST /api/quotations/:id/pdf   - Upload PDF to Notion');
+    console.log('      GET  /api/cotizaciones/next-number - Next COT number');
+    console.log('      GET  /api/quotations          - List quotations');
+    console.log('      GET  /api/quotations/:id      - Get quotation + state');
+    console.log('      POST /api/quotations          - Create quotation');
+    console.log('      PUT  /api/quotations/:id      - Update quotation');
+    console.log('      POST /api/quotations/:id/pdf  - Upload PDF');
+    console.log('   📦 Tables: catalogo_items, clientes, proyectos_2026, eventos_2026, cotizaciones');
     console.log('═══════════════════════════════════════════════');
     console.log('');
 });

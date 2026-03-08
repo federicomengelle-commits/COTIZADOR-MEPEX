@@ -1,17 +1,20 @@
 {
   "name": "mepex-cotizador-api",
   "version": "1.0.0",
-  "description": "Backend API for MEPEX Cotizador - Notion Integration",
+  "description": "Backend API for MEPEX Cotizador - Supabase",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "dev": "node --watch index.js"
+    "dev": "node --watch index.js",
+    "migrate": "node migrate-notion-to-supabase.js"
   },
   "dependencies": {
     "@notionhq/client": "^2.2.14",
+    "@supabase/supabase-js": "^2.98.0",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
     "express": "^4.18.2",
-    "multer": "^2.0.2"
+    "multer": "^2.0.2",
+    "pg": "^8.20.0"
   }
 }
