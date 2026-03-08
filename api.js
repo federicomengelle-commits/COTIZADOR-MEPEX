@@ -1,7 +1,7 @@
 // =============================================
 // MEPEX COTIZADOR - API CLIENT
 // =============================================
-// Módulo para conectar con el backend y Notion
+// Módulo para conectar con el backend y Supabase
 // =============================================
 
 const API = {
@@ -94,7 +94,7 @@ const API = {
         this.cache.timestamp = new Date();
         this.lastSync = response.timestamp;
 
-        console.log(`📦 Loaded ${response.count} items from Notion`);
+        console.log(`📦 Loaded ${response.count} items from API`);
         return response.items;
     },
 
@@ -146,12 +146,12 @@ const API = {
     // =============================================
     async loadCatalog() {
         try {
-            const notionItems = await this.getCatalog();
+            const apiItems = await this.getCatalog();
 
-            // Convertir formato Notion a formato local
-            const convertedItems = notionItems.map(item => this.convertToLocalFormat(item));
+            // Convertir formato API a formato local
+            const convertedItems = apiItems.map(item => this.convertToLocalFormat(item));
 
-            console.log('🔄 Catalog synced from Notion:', convertedItems.length, 'items');
+            console.log('🔄 Catalog synced from API:', convertedItems.length, 'items');
 
             // Merge con el DATABASE local
             this.mergeCatalog(convertedItems);
@@ -169,9 +169,9 @@ const API = {
         }
     },
 
-    // Convertir item de Notion a formato de la app
-    convertToLocalFormat(notionItem) {
-        // Mapear RUBRO de Notion (categoría principal) a categoría local
+    // Convertir item de API a formato de la app
+    convertToLocalFormat(apiItem) {
+        // Mapear RUBRO (categoría principal) a categoría local
         // NOTA: 'infrastructure' y 'lighting' son afectados por el multiplicador de altura
         const rubroMap = {
             // Pisos
@@ -188,7 +188,7 @@ const API = {
             'Más servicios': 'moreservices'
         };
 
-        // Mapear Categoría de Notion (subcategoría) a subcategoría local
+        // Mapear Categoría (subcategoría) a subcategoría local
         // Solo para equipment y marketing que tienen subcategorías
         const subcategoryMap = {
             // Equipment subcategories
@@ -202,8 +202,8 @@ const API = {
         };
 
         // Obtener rubro (categoría principal)
-        const rubro = notionItem.rubro || 'Equipamiento';
-        const categoria = notionItem.category || null;  // subcategoría
+        const rubro = apiItem.rubro || 'Equipamiento';
+        const categoria = apiItem.category || null;  // subcategoría
 
         // Determinar categoría local usando RUBRO
         const localCategory = rubroMap[rubro] || 'equipment';
@@ -220,35 +220,34 @@ const API = {
         }
 
         // Generar ID único basado en el código o nombre
-        const code = notionItem.code || '';
-        const safeName = (notionItem.name || 'item').toLowerCase().replace(/[^a-z0-9]/g, '_').substring(0, 20);
-        const itemId = code ? `notion_${code.toLowerCase().replace(/[^a-z0-9]/g, '_')}` : `notion_${safeName}`;
+        const code = apiItem.code || '';
+        const safeName = (apiItem.name || 'item').toLowerCase().replace(/[^a-z0-9]/g, '_').substring(0, 20);
+        const itemId = code ? `item_${code.toLowerCase().replace(/[^a-z0-9]/g, '_')}` : `item_${safeName}`;
 
         return {
             id: itemId,
-            notionId: notionItem.id,
-            name: notionItem.name || 'Sin nombre',
-            description: notionItem.description || '',
+            sourceId: apiItem.id,
+            name: apiItem.name || 'Sin nombre',
+            description: apiItem.description || '',
             code: code,
-            price: notionItem.price || 0,
-            unit: this.convertUnit(notionItem.unit),
+            price: apiItem.price || 0,
+            unit: this.convertUnit(apiItem.unit),
             category: localCategory,
             subcategory: localSubcategory,
-            // CAMPOS ORIGINALES DE NOTION para mostrar en la tabla
-            notionCategory: notionItem.category || '',   // Etiqueta original de Notion (Audiovisual, Tableros, etc)
-            notionRubro: notionItem.rubro || '',         // RUBRO original de Notion
+            // Campos originales de la DB para mostrar en la tabla
+            originalCategory: apiItem.category || '',   // Etiqueta original (Audiovisual, Tableros, etc)
+            originalRubro: apiItem.rubro || '',          // RUBRO original
             type: 'counter', // Por defecto counter
             autoCalculate: false,
-            favorite: notionItem.favorite || false,
+            favorite: apiItem.favorite || false,
             // Metadata
-            source: 'notion',
-            notionUrl: notionItem.notionUrl,
-            updatedAt: notionItem.updatedAt
+            source: 'supabase',
+            updatedAt: apiItem.updatedAt
         };
     },
 
-    // Convertir unidad de Notion a formato local
-    convertUnit(notionUnit) {
+    // Convertir unidad de la DB a formato local
+    convertUnit(dbUnit) {
         const unitMap = {
             'm2': 'm²',
             'ml': 'ml',
@@ -258,33 +257,33 @@ const API = {
             'set': 'set',
             'proyecto': 'proyecto'
         };
-        return unitMap[notionUnit] || notionUnit || 'unidad';
+        return unitMap[dbUnit] || dbUnit || 'unidad';
     },
 
-    // Merge items de Notion con DATABASE local
-    mergeCatalog(notionItems) {
-        if (!notionItems || notionItems.length === 0) return;
+    // Merge items de la API con DATABASE local
+    mergeCatalog(apiItems) {
+        if (!apiItems || apiItems.length === 0) return;
 
-        console.log('🔀 Merging', notionItems.length, 'Notion items with local database...');
+        console.log('🔀 Merging', apiItems.length, 'API items with local database...');
 
-        notionItems.forEach(notionItem => {
+        apiItems.forEach(apiItem => {
             // Buscar si ya existe un item con el mismo ID
-            const existingIndex = DATABASE.items.findIndex(item => item.id === notionItem.id);
+            const existingIndex = DATABASE.items.findIndex(item => item.id === apiItem.id);
 
             if (existingIndex !== -1) {
-                // Actualizar el item existente con datos de Notion
+                // Actualizar el item existente con datos de la API
                 DATABASE.items[existingIndex] = {
                     ...DATABASE.items[existingIndex],
-                    ...notionItem,
+                    ...apiItem,
                     // Mantener configuraciones locales importantes
-                    type: DATABASE.items[existingIndex].type || notionItem.type,
+                    type: DATABASE.items[existingIndex].type || apiItem.type,
                     autoCalculate: DATABASE.items[existingIndex].autoCalculate || false
                 };
-                console.log(`   ↻ Updated: ${notionItem.name}`);
+                console.log(`   ↻ Updated: ${apiItem.name}`);
             } else {
                 // Agregar nuevo item
-                DATABASE.items.push(notionItem);
-                console.log(`   + Added: ${notionItem.name}`);
+                DATABASE.items.push(apiItem);
+                console.log(`   + Added: ${apiItem.name}`);
             }
         });
 
@@ -391,7 +390,7 @@ const API = {
     // ENDPOINTS: COTIZACIONES
     // =============================================
 
-    // Obtener el siguiente número de cotización desde Notion
+    // Obtener el siguiente número de cotización desde la API
     async getNextQuotationNumber() {
         const response = await this.request('/cotizaciones/next-number');
         return response; // { success, year, next, formatted, existingCount }
@@ -443,7 +442,7 @@ const API = {
         }
     },
 
-    // Subir PDF a Notion (multipart — NO usar this.request())
+    // Subir PDF a Supabase Storage (multipart — NO usar this.request())
     async uploadPDF(pageId, blob, fileName) {
         const url = `${this.baseUrl}/quotations/${pageId}/pdf`;
         const formData = new FormData();
@@ -491,4 +490,4 @@ const API = {
 window.API = API;
 
 // Log inicial
-console.log('📡 API Client loaded - waiting for initialization');
+console.log('📡 API Client loaded — waiting for initialization');

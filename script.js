@@ -497,8 +497,8 @@ const Render = {
             mainContainer.innerHTML = `
                 <div class="empty-catalog-state">
                     <div class="empty-icon">📡</div>
-                    <h3>Conectando con Notion...</h3>
-                    <p>Los items se cargarán automáticamente desde la base de datos de Notion.</p>
+                    <h3>Conectando con Supabase...</h3>
+                    <p>Los items se cargarán automáticamente desde la base de datos.</p>
                     <p class="empty-hint">Si el servidor no está corriendo, ejecutá <strong>INICIAR COTIZADOR.bat</strong></p>
                 </div>
             `;
@@ -1055,8 +1055,8 @@ const Render = {
                         ← Volver al Cotizador
                     </button>
                 </div>
-                <h2>🔧 Catálogo de Items desde Notion</h2>
-                <p>Visualiza los items sincronizados desde la base de datos de Notion</p>
+                <h2>🔧 Catálogo de Items</h2>
+                <p>Visualiza los items sincronizados desde la base de datos</p>
             </div>
             <div class="admin-content">
         `;
@@ -1079,7 +1079,7 @@ const Render = {
             if (items.length === 0) {
                 html += `<div class="admin-empty-state">
                     <p>📭 No hay items en esta categoría</p>
-                    <small>Los items se cargan automáticamente desde Notion</small>
+                    <small>Los items se cargan automáticamente desde la base de datos</small>
                 </div>`;
             } else {
                 html += `<table class="admin-table">
@@ -1096,8 +1096,8 @@ const Render = {
                     <tbody>`;
 
                 items.forEach(item => {
-                    // Obtener datos de Notion - usar notionCategory para mostrar etiquetas originales
-                    const categoria = item.notionCategory || item.category || '-';
+                    // Usar originalCategory para mostrar etiquetas originales de la DB
+                    const categoria = item.originalCategory || item.category || '-';
                     const codigo = item.code || '-';
                     const descripcion = item.description || '-';
 
@@ -1342,19 +1342,19 @@ const Render = {
         const margin = 20;
         const contentWidth = pageWidth - (margin * 2);
 
-        // Número de cotización secuencial (Notion API-first, localStorage fallback)
+        // Número de cotización secuencial (API-first, localStorage fallback)
         let cotNumber;
         const currentYear = new Date().getFullYear();
         try {
             if (typeof API !== 'undefined' && API.isConnected) {
                 const numData = await API.getNextQuotationNumber();
                 cotNumber = numData.formatted;
-                console.log(`🔢 Número de cotización obtenido de Notion: ${cotNumber}`);
+                console.log(`🔢 Número de cotización obtenido de la API: ${cotNumber}`);
             } else {
                 throw new Error('API not available');
             }
         } catch (e) {
-            console.warn('⚠️ No se pudo obtener número de Notion, usando localStorage:', e.message);
+            console.warn('⚠️ No se pudo obtener número de la API, usando localStorage:', e.message);
             const storageKey = `mepex_cot_seq_${currentYear}`;
             let cotSeq = parseInt(localStorage.getItem(storageKey) || '0') + 1;
             localStorage.setItem(storageKey, cotSeq.toString());
@@ -1887,7 +1887,7 @@ const Render = {
         const pdfBlob = doc.output('blob');
         doc.save(fileName);
 
-        // Guardar cotización (API + localStorage) + subir PDF a Notion en background
+        // Guardar cotización (API + localStorage) + subir PDF a Supabase en background
         if (typeof QuotationStorage !== 'undefined') {
             QuotationStorage.saveQuotation(cotNumber, pdfBlob).catch(e =>
                 console.error('Error guardando cotización:', e)
@@ -1902,10 +1902,10 @@ const Render = {
 // =============================================
 document.addEventListener('DOMContentLoaded', async () => {
     // LIMPIAR CACHE: Eliminar items viejos de localStorage
-    // Esto asegura que solo se muestren items de Notion
+    // Esto asegura que solo se muestren items de Supabase
     localStorage.removeItem('mepex_database');
     DATABASE.items = []; // Asegurar que el array esté vacío
-    console.log('🧹 Cleared cached items - waiting for Notion data...');
+    console.log('🧹 Cleared cached items — waiting for Supabase data...');
 
     // Update sync status UI
     const updateSyncStatus = (status, text) => {
@@ -1924,8 +1924,14 @@ document.addEventListener('DOMContentLoaded', async () => {
             const connected = await API.init();
 
             if (connected) {
-                updateSyncStatus('online', 'Notion');
-                console.log('✅ Connected to Notion via API');
+                // Verify items actually loaded
+                if (DATABASE.items.length > 0) {
+                    updateSyncStatus('online', 'Supabase');
+                    console.log(`✅ Connected to Supabase — ${DATABASE.items.length} items loaded`);
+                } else {
+                    updateSyncStatus('error', 'Sin items');
+                    console.warn('⚠️ API connected but 0 items loaded');
+                }
             } else {
                 updateSyncStatus('offline', 'Local');
                 console.log('⚠️ API not available, using local database');
@@ -1957,7 +1963,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const { items, timestamp } = e.detail;
         console.log(`📦 Catalog synced: ${items.length} items at ${new Date(timestamp).toLocaleString()}`);
 
-        // Re-render items to show new Notion items
+        // Re-render items to show new synced items
         Render.renderItems();
         Render.renderAdminPanel();
     });

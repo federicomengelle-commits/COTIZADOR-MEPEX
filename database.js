@@ -59,13 +59,13 @@ const DATABASE = {
         }
     },
 
-    // Catálogo de Items - VACÍO: Los items vienen de Notion
+    // Catálogo de Items - VACÍO: Los items vienen de Supabase
     // =============================================
-    // Los items se cargan dinámicamente desde Notion via API
-    // Esta lista puede contener items de fallback si Notion no está disponible
+    // Los items se cargan dinámicamente desde Supabase via API
+    // Esta lista puede contener items de fallback si la API no está disponible
     // =============================================
     items: [
-        // Items se cargan desde Notion
+        // Items se cargan desde Supabase
         // Si necesitas items de fallback (offline), agrégalos aquí
     ],
 
@@ -241,8 +241,8 @@ const DB = {
 };
 
 // IMPORTANTE: No cargar desde localStorage automáticamente
-// Los items ahora vienen exclusivamente de Notion
+// Los items ahora vienen exclusivamente de Supabase
 // Para limpiar items viejos guardados en el navegador:
 // localStorage.removeItem('mepex_database');
 
-console.log('📦 Database loaded - waiting for Notion items...');
+console.log('📦 Database loaded — waiting for API items...');

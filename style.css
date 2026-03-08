@@ -1597,7 +1597,7 @@ input[type="checkbox"] {
 }
 
 /* =============================================
-   SYNC STATUS INDICATOR - Notion Connection
+   SYNC STATUS INDICATOR - DB Connection
    ============================================= */
 .header-top {
     display: flex;

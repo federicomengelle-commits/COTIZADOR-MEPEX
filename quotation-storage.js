@@ -15,7 +15,7 @@ const QuotationStorage = {
     async saveQuotation(cotNumber, pdfBlob = null) {
         const quotation = this._collectCurrentState(cotNumber);
 
-        // Intentar guardar en Notion via API
+        // Intentar guardar en Supabase via API
         try {
             if (typeof API !== 'undefined' && API.isConnected) {
                 const apiData = {
@@ -35,20 +35,20 @@ const QuotationStorage = {
                 };
 
                 const saved = await API.saveQuotation(apiData);
-                // Usar el id de Notion como id de la cotización
+                // Usar el id de Supabase como id de la cotización
                 quotation.id = saved.id;
-                console.log(`☁️ Cotización ${cotNumber} guardada en Notion (${saved.id})`);
+                console.log(`☁️ Cotización ${cotNumber} guardada en Supabase (${saved.id})`);
 
                 // Subir PDF en background (fire-and-forget)
                 if (pdfBlob && saved.id) {
                     const fileName = `${cotNumber}.pdf`;
                     API.uploadPDF(saved.id, pdfBlob, fileName)
-                        .then(() => console.log(`📎 PDF ${fileName} subido a Notion`))
-                        .catch(e => console.warn('⚠️ No se pudo subir el PDF a Notion:', e.message));
+                        .then(() => console.log(`📎 PDF ${fileName} subido a Supabase`))
+                        .catch(e => console.warn('⚠️ No se pudo subir el PDF a Supabase:', e.message));
                 }
             }
         } catch (e) {
-            console.warn('⚠️ No se pudo guardar en Notion, usando localStorage:', e.message);
+            console.warn('⚠️ No se pudo guardar en Supabase, usando localStorage:', e.message);
         }
 
         // Siempre guardar en localStorage (como backup)
@@ -62,26 +62,26 @@ const QuotationStorage = {
         try {
             if (typeof API !== 'undefined' && API.isConnected) {
                 const quotations = await API.getQuotations();
-                console.log(`☁️ ${quotations.length} cotizaciones cargadas de Notion`);
+                console.log(`☁️ ${quotations.length} cotizaciones cargadas de Supabase`);
                 return quotations;
             }
         } catch (e) {
-            console.warn('⚠️ No se pudieron cargar de Notion, usando localStorage:', e.message);
+            console.warn('⚠️ No se pudieron cargar de Supabase, usando localStorage:', e.message);
         }
 
         return this._getFromLocalStorage();
     },
 
-    // Obtener cotización por id (Notion page_id o UUID local)
+    // Obtener cotización por id (Supabase UUID o UUID local)
     async getQuotationById(id) {
         try {
             if (typeof API !== 'undefined' && API.isConnected) {
                 const quotation = await API.getQuotation(id);
-                console.log(`☁️ Cotización ${id} cargada de Notion`);
+                console.log(`☁️ Cotización ${id} cargada de Supabase`);
                 return quotation;
             }
         } catch (e) {
-            console.warn('⚠️ No se pudo cargar de Notion, buscando en localStorage:', e.message);
+            console.warn('⚠️ No se pudo cargar de Supabase, buscando en localStorage:', e.message);
         }
 
         return this._getFromLocalStorageById(id);

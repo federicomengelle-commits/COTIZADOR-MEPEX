@@ -111,7 +111,7 @@ const QuotationUI = {
         try {
             const q = await QuotationStorage.getQuotationById(id);
             if (!q) return;
-            // Si viene de Notion con fullState, usar ese objeto para restaurar
+            // Si viene de Supabase con fullState, usar ese objeto para restaurar
             const stateObj = q.fullState || q;
             this._restoreState(stateObj, false);
             this.closeModal();

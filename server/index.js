@@ -151,12 +151,32 @@ function formatQuotation(row) {
 // ENDPOINTS: HEALTH
 // =============================================
 
-app.get('/api/health', (req, res) => {
-    res.json({
-        status: 'ok',
-        timestamp: new Date().toISOString(),
-        version: '2.0.0'
-    });
+app.get('/api/health', async (req, res) => {
+    try {
+        // Verify Supabase connectivity
+        const { count, error } = await supabase
+            .from('catalogo_items')
+            .select('id', { count: 'exact', head: true });
+
+        if (error) throw error;
+
+        res.json({
+            status: 'ok',
+            timestamp: new Date().toISOString(),
+            version: '2.0.0',
+            db: 'supabase',
+            catalogItems: count
+        });
+    } catch (error) {
+        console.error('❌ Health check — Supabase error:', error.message);
+        res.json({
+            status: 'ok',
+            timestamp: new Date().toISOString(),
+            version: '2.0.0',
+            db: 'error',
+            dbError: error.message
+        });
+    }
 });
 
 // =============================================
@@ -170,7 +190,7 @@ app.get('/api/catalog', async (req, res) => {
         const { data, error } = await supabase
             .from('catalogo_items')
             .select('*')
-            .eq('activo', true)
+            .or('activo.eq.true,activo.is.null')
             .order('nombre');
 
         if (error) throw error;
@@ -198,7 +218,7 @@ app.get('/api/catalog/schema', async (req, res) => {
         const { data: items, error } = await supabase
             .from('catalogo_items')
             .select('rubro, categoria, unidad')
-            .eq('activo', true);
+            .or('activo.eq.true,activo.is.null');
 
         if (error) throw error;
 
@@ -244,7 +264,7 @@ app.get('/api/catalog/category/:category', async (req, res) => {
         const { data, error } = await supabase
             .from('catalogo_items')
             .select('*')
-            .eq('activo', true)
+            .or('activo.eq.true,activo.is.null')
             .eq('categoria', category);
 
         if (error) throw error;
