@@ -8,7 +8,7 @@ const API = {
     // Configuración
     baseUrl: window.location.hostname === 'localhost'
         ? 'http://localhost:3001/api'
-        : 'http://195.200.1.250/cotizador-api/api'
+        : 'http://195.200.1.250/cotizador-api/api',
 
     // Estado de conexión
     isConnected: false,
