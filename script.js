@@ -432,6 +432,7 @@ const Render = {
     init() {
         this.setupGeneralParams();
         this.renderNav();
+        this._initItemsDelegation();
         this.renderItems();
         this.renderAdminPanel();
         this.updateSummary();
@@ -877,21 +878,13 @@ const Render = {
             container.appendChild(card);
         });
 
-        // Botón toggle "Ver todos / Ver menos"
+        // Botón toggle "Ver todos / Ver menos" — click manejado por delegación en #items-container
         const btn = document.createElement('button');
         btn.className = 'toggle-all-btn';
         btn.dataset.containerId = container.id;
         btn.dataset.nonFavCount = nonFavorites.length;
         btn.dataset.catName = displayName;
         btn.textContent = `Ver todos los items de ${displayName} (+${nonFavorites.length} más)`;
-        btn.addEventListener('click', () => {
-            const isExpanded = container.classList.contains('expanded');
-            container.classList.toggle('expanded', !isExpanded);
-            btn.textContent = !isExpanded
-                ? 'Ver menos'
-                : `Ver todos los items de ${displayName} (+${nonFavorites.length} más)`;
-        });
-        // Insertar el botón después del contenedor (como hermano en el DOM)
         container.parentNode.insertBefore(btn, container.nextSibling);
     },
 
@@ -963,52 +956,75 @@ const Render = {
         return card;
     },
 
-    attachItemListeners() {
-        // Click en botón de favorito (toggle overlay local + re-render)
-        document.querySelectorAll('.item-fav-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
+    // Event delegation en #items-container — bindeado UNA sola vez desde init.
+    // Evita re-bindear en cada renderItems() y elimina riesgo de listeners huérfanos.
+    _initItemsDelegation() {
+        const container = document.getElementById('items-container');
+        if (!container || container._delegated) return;
+        container._delegated = true;
+
+        // Clicks: favorito, contadores, "Ver todos"
+        container.addEventListener('click', (e) => {
+            // Botón favorito
+            const favBtn = e.target.closest('.item-fav-btn');
+            if (favBtn) {
                 e.stopPropagation();
-                const id = btn.dataset.id;
+                const id = favBtn.dataset.id;
                 const nowFav = Favorites.toggle(id);
                 this.renderItems();
                 if (typeof Toast !== 'undefined') {
                     Toast.info(nowFav ? '⭐ Agregado a favoritos' : 'Quitado de favoritos', 1500);
                 }
-            });
-        });
+                return;
+            }
 
-        // Contadores
-        document.querySelectorAll('.btn-count').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const id = e.target.dataset.id;
-                const action = e.target.dataset.action;
+            // Botón +/- de contador
+            const countBtn = e.target.closest('.btn-count');
+            if (countBtn) {
+                const id = countBtn.dataset.id;
+                const action = countBtn.dataset.action;
                 const currentQty = State.getItemQuantity(id);
-
                 let newQty = currentQty;
                 if (action === 'inc') newQty++;
                 if (action === 'dec') newQty = Math.max(0, newQty - 1);
-
                 State.toggleItem(id, newQty);
-            });
+                return;
+            }
+
+            // Botón "Ver todos / Ver menos" de categoría
+            const toggleBtn = e.target.closest('.toggle-all-btn');
+            if (toggleBtn) {
+                const catContainer = document.getElementById(toggleBtn.dataset.containerId);
+                if (!catContainer) return;
+                const catName = toggleBtn.dataset.catName;
+                const nonFavCount = toggleBtn.dataset.nonFavCount;
+                const willExpand = !catContainer.classList.contains('expanded');
+                catContainer.classList.toggle('expanded', willExpand);
+                toggleBtn.textContent = willExpand
+                    ? 'Ver menos'
+                    : `Ver todos los items de ${catName} (+${nonFavCount} más)`;
+            }
         });
 
-        // Checkboxes
-        document.querySelectorAll('input[data-action="check"]').forEach(chk => {
-            chk.addEventListener('change', (e) => {
-                const id = e.target.dataset.id;
-                State.toggleItem(id);
-            });
-        });
-
-        // Inputs de cantidad (editables con teclado)
-        document.querySelectorAll('.count-input').forEach(input => {
-            input.addEventListener('change', (e) => {
-                const id = e.target.dataset.id;
-                const newQty = Math.max(0, parseInt(e.target.value) || 0);
-                e.target.value = newQty; // Asegurar que el valor sea válido
+        // Change: checkboxes + inputs de cantidad
+        container.addEventListener('change', (e) => {
+            const target = e.target;
+            if (target.matches('input[data-action="check"]')) {
+                State.toggleItem(target.dataset.id);
+                return;
+            }
+            if (target.matches('.count-input')) {
+                const id = target.dataset.id;
+                const newQty = Math.max(0, parseInt(target.value) || 0);
+                target.value = newQty;
                 State.toggleItem(id, newQty);
-            });
+            }
         });
+    },
+
+    attachItemListeners() {
+        // No-op: los listeners están delegados en _initItemsDelegation().
+        // Mantengo el método por compatibilidad con llamadas existentes en renderItems().
     },
 
     updateAll() {
