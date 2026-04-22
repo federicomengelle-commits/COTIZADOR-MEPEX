@@ -1,0 +1,11 @@
+# Forzar LF en shell scripts para que corran bien en el VPS (Linux)
+# aunque se editen en Windows.
+*.sh text eol=lf
+
+# Archivos binarios: que git no intente hacer conversiones de line endings
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.pdf binary
+*.ico binary
