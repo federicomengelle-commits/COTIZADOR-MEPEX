@@ -988,6 +988,20 @@ const Render = {
             this.applySearchFilter(query);
         });
 
+        // Esc dentro del input: limpia búsqueda y quita focus
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                if (input.value) {
+                    input.value = '';
+                    if (clearBtn) clearBtn.style.display = 'none';
+                    this.applySearchFilter('');
+                }
+                input.blur();
+            }
+        });
+
+        this._initGlobalShortcuts(input);
+
         if (clearBtn) {
             clearBtn.addEventListener('click', () => {
                 input.value = '';
@@ -996,6 +1010,53 @@ const Render = {
                 input.focus();
             });
         }
+    },
+
+    // Atajos de teclado globales: Ctrl/Cmd+K y "/" enfocan el search.
+    // Esc (en cualquier parte) blurea el elemento activo.
+    _initGlobalShortcuts(searchInput) {
+        if (this._shortcutsBound) return;
+        this._shortcutsBound = true;
+
+        const isTypingTarget = (el) => {
+            if (!el) return false;
+            const tag = el.tagName;
+            return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable;
+        };
+
+        document.addEventListener('keydown', (e) => {
+            // Ctrl+K / Cmd+K: focus al search desde cualquier lado
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+                e.preventDefault();
+                searchInput.focus();
+                searchInput.select();
+                searchInput.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                return;
+            }
+
+            // "/" solo dispara si no estamos ya tipeando en otro campo
+            if (e.key === '/' && !isTypingTarget(e.target)) {
+                e.preventDefault();
+                searchInput.focus();
+                searchInput.select();
+                searchInput.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                return;
+            }
+
+            // Esc global: si hay un modal abierto lo cierra; sino saca focus del elemento activo
+            if (e.key === 'Escape') {
+                const confirmOverlay = document.querySelector('.confirm-overlay');
+                if (confirmOverlay) return; // Confirm maneja su propio Esc
+                const quotModal = document.getElementById('quotation-modal');
+                if (quotModal && typeof QuotationUI !== 'undefined') {
+                    QuotationUI.closeModal();
+                    return;
+                }
+                if (isTypingTarget(document.activeElement) && document.activeElement !== searchInput) {
+                    document.activeElement.blur();
+                }
+            }
+        });
     },
 
     // Normaliza un texto para búsqueda: lowercase + sin acentos + sin espacios extra

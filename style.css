@@ -2759,6 +2759,30 @@ input[type="checkbox"] {
     background: var(--color-surface-hover);
 }
 
+/* Badge de atajo de teclado en el search (Ctrl+K) */
+.items-search-kbd {
+    position: absolute;
+    right: 10px;
+    pointer-events: none;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    background: var(--color-surface-hover, rgba(255, 255, 255, 0.06));
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
+    border-radius: 4px;
+    padding: 2px 6px;
+    line-height: 1;
+    user-select: none;
+    transition: opacity 0.15s;
+}
+
+/* Ocultar el badge cuando el input está activo o tiene texto */
+.items-search-wrapper:focus-within .items-search-kbd,
+.items-search-wrapper:has(#items-search:not(:placeholder-shown)) .items-search-kbd {
+    opacity: 0;
+}
+
 /* --- Items no-favoritos: ocultos por defecto --- */
 .category-items .item-card.non-favorite {
     display: none;
