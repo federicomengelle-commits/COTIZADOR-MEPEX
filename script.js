@@ -436,6 +436,7 @@ const Render = {
         this.renderItems();
         this.renderAdminPanel();
         this.updateSummary();
+        this._initScrollSpy();
 
         // Bind global actions
         document.getElementById('btn-reset')?.addEventListener('click', () => this.handleReset());
@@ -852,6 +853,7 @@ const Render = {
 
         this.attachItemListeners();
         this.reapplySearchFilter();
+        this._rescanScrollSpy();
     },
 
     // Renderiza un grupo de items en un contenedor con lógica de favoritos
@@ -1025,6 +1027,65 @@ const Render = {
     attachItemListeners() {
         // No-op: los listeners están delegados en _initItemsDelegation().
         // Mantengo el método por compatibilidad con llamadas existentes en renderItems().
+    },
+
+    // Scrollspy: auto-highlight del nav-link según qué sección está en viewport.
+    // Se llama UNA sola vez desde init(), observa #general-params y toda sección
+    // .category-section que aparece después del render inicial.
+    _initScrollSpy() {
+        if (this._scrollSpyInit) return;
+        this._scrollSpyInit = true;
+
+        // Mapa sectionId → nav-link correspondiente
+        const linkFor = (sectionId) => {
+            if (sectionId === 'general-params') {
+                return document.querySelector('.nav-block-params .nav-link');
+            }
+            if (sectionId.startsWith('cat-')) {
+                const catId = sectionId.replace(/^cat-/, '');
+                return document.querySelector(`.nav-link[data-cat-id="${catId}"]`);
+            }
+            return null;
+        };
+
+        const setActive = (link) => {
+            if (!link) return;
+            document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
+            link.classList.add('active');
+        };
+
+        // Observer con rootMargin: dispara cuando la sección entra al tercio superior
+        const observer = new IntersectionObserver((entries) => {
+            // Toma la entrada con mayor intersectionRatio de las que están intersectando
+            const visible = entries
+                .filter(e => e.isIntersecting)
+                .sort((a, b) => b.intersectionRatio - a.intersectionRatio);
+            if (visible.length === 0) return;
+            const link = linkFor(visible[0].target.id);
+            if (link) setActive(link);
+        }, {
+            // Activa la sección cuando su top cruza ~25% del viewport desde arriba
+            rootMargin: '-20% 0px -60% 0px',
+            threshold: [0, 0.25, 0.5, 0.75, 1]
+        });
+
+        // Observar sections existentes. Como renderItems puede recrear
+        // .category-section, expongo el observer para que renderItems lo llame
+        // (opcional) — por ahora observamos una vez acá, y como las sections se
+        // recrean por innerHTML, observamos de nuevo cada vez que termina renderItems.
+        this._scrollSpyObserver = observer;
+        this._rescanScrollSpy();
+    },
+
+    // Re-observar tras cualquier re-render que recree .category-section
+    _rescanScrollSpy() {
+        if (!this._scrollSpyObserver) return;
+        this._scrollSpyObserver.disconnect();
+        const paramsEl = document.getElementById('general-params');
+        if (paramsEl) this._scrollSpyObserver.observe(paramsEl);
+        document.querySelectorAll('.category-section').forEach(s => {
+            this._scrollSpyObserver.observe(s);
+        });
     },
 
     updateAll() {
