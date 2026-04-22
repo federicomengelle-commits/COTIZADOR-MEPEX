@@ -365,8 +365,8 @@ const Render = {
         this.updateSummary();
 
         // Bind global actions
-        document.getElementById('btn-reset')?.addEventListener('click', () => State.reset());
-        document.getElementById('btn-export')?.addEventListener('click', () => this.exportPDF());
+        document.getElementById('btn-reset')?.addEventListener('click', () => this.handleReset());
+        document.getElementById('btn-export')?.addEventListener('click', () => this.handleExport());
         // btn-admin se vincula en renderNav()
 
         // Quotation type selector (en params section)
@@ -409,6 +409,13 @@ const Render = {
 
         // Layout inicial
         this.updateLayoutForType(State.generalParams.quotationType);
+
+        // Limpiar estado de error al tipear/cambiar cualquier input
+        document.addEventListener('input', (e) => {
+            if (e.target.classList?.contains('input-error')) {
+                e.target.classList.remove('input-error');
+            }
+        });
     },
 
     // Toggle visibilidad de secciones según tipo
@@ -1438,6 +1445,123 @@ const Render = {
         this.updateLayoutForType('stand');
     },
 
+    // =============================================
+    // VALIDACIÓN PRE-EXPORT
+    // =============================================
+    validateForExport() {
+        const errors = [];
+        const params = State.generalParams;
+        const qType = params.quotationType || 'stand';
+
+        // Limpiar estados de error previos
+        document.querySelectorAll('.input-error').forEach(el => el.classList.remove('input-error'));
+
+        const clienteInput = document.getElementById('input-cliente');
+        const proyectoInput = document.getElementById('input-proyecto');
+        const eventoInput = document.getElementById('input-evento');
+        const metrajeInput = document.getElementById('input-metraje');
+
+        const clienteVal = (clienteInput?.value || '').trim();
+        const proyectoVal = (proyectoInput?.value || '').trim();
+        const eventoVal = (eventoInput?.value || '').trim();
+
+        if (!clienteVal) {
+            errors.push({ field: clienteInput, msg: 'Falta el Cliente' });
+        }
+        if (!proyectoVal) {
+            errors.push({ field: proyectoInput, msg: 'Falta el Proyecto' });
+        }
+        if (!eventoVal) {
+            errors.push({ field: eventoInput, msg: 'Falta el Evento' });
+        }
+
+        if (qType === 'stand') {
+            const metraje = parseFloat(metrajeInput?.value);
+            if (!metraje || metraje < 1) {
+                errors.push({ field: metrajeInput, msg: 'Falta la Superficie' });
+            }
+            const hasItems = Object.values(State.selectedItems).some(d => d.quantity > 0);
+            if (!hasItems) {
+                errors.push({ field: null, msg: 'No hay items seleccionados' });
+            }
+        } else {
+            // Expo/Alquiler: al menos un espacio con al menos un item
+            const spaces = params.spaces || [];
+            if (spaces.length === 0) {
+                errors.push({ field: null, msg: 'No hay espacios creados' });
+            } else {
+                const hasAnyItem = spaces.some(s => Object.values(s.items || {}).some(d => d.quantity > 0));
+                if (!hasAnyItem) {
+                    errors.push({ field: null, msg: 'Ningún espacio tiene items cargados' });
+                }
+            }
+        }
+
+        return errors;
+    },
+
+    handleReset() {
+        const hasContent = Object.keys(State.selectedItems).length > 0
+            || (State.generalParams.spaces || []).some(s => Object.keys(s.items || {}).length > 0)
+            || (document.getElementById('input-cliente')?.value || '').trim()
+            || (document.getElementById('input-proyecto')?.value || '').trim()
+            || (document.getElementById('input-evento')?.value || '').trim();
+
+        if (!hasContent) {
+            State.reset();
+            return;
+        }
+
+        Confirm.show({
+            title: 'Reiniciar cotización',
+            message: 'Se perderán todos los datos cargados (cliente, parámetros e items). ¿Continuar?',
+            confirmText: 'Sí, reiniciar',
+            cancelText: 'Cancelar',
+            danger: true
+        }).then(confirmed => {
+            if (confirmed) {
+                State.reset();
+                Toast.success('Cotización reiniciada');
+            }
+        });
+    },
+
+    async handleExport() {
+        const errors = this.validateForExport();
+        if (errors.length > 0) {
+            errors.forEach(err => {
+                if (err.field) err.field.classList.add('input-error');
+            });
+            const first = errors[0];
+            Toast.error(first.msg);
+            if (first.field) {
+                first.field.focus();
+                first.field.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+            return;
+        }
+
+        const btn = document.getElementById('btn-export');
+        if (!btn) return;
+
+        const originalHTML = btn.innerHTML;
+        btn.classList.add('is-loading');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="mp-spinner"></span>Generando PDF...';
+
+        try {
+            await this.exportPDF();
+            Toast.success('PDF generado correctamente');
+        } catch (e) {
+            console.error('❌ Error generando PDF:', e);
+            Toast.error('No se pudo generar el PDF. Revisá la consola.');
+        } finally {
+            btn.classList.remove('is-loading');
+            btn.disabled = false;
+            btn.innerHTML = originalHTML;
+        }
+    },
+
     async exportPDF() {
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF({
@@ -1983,8 +2107,16 @@ const Render = {
         // ========================================
         // GUARDAR PDF
         // ========================================
-        const fileName = `MEPEX_${cotNumber}_${cliente.replace(/\s+/g, '_')}_${today.toISOString().split('T')[0]}.pdf`;
-        const pdfBlob = doc.output('blob');
+        const safeCliente = (cliente || 'cliente').replace(/[^a-zA-Z0-9_-]+/g, '_').slice(0, 40);
+        const fileName = `MEPEX_${cotNumber}_${safeCliente}_${today.toISOString().split('T')[0]}.pdf`;
+
+        let pdfBlob = null;
+        try {
+            pdfBlob = doc.output('blob');
+        } catch (e) {
+            console.warn('⚠️ No se pudo generar el blob del PDF (se guardará igualmente):', e);
+        }
+
         doc.save(fileName);
 
         // Guardar cotización (API + localStorage) + subir PDF a Supabase en background
