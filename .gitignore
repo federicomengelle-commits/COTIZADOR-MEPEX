@@ -1,23 +1,68 @@
+# =============================================
+# Secretos y credenciales (CRÍTICO — nunca commitear)
+# =============================================
+.env
+.env.*
+!.env.example
+server/.env
+server/.env.*
+!server/.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.json
+secrets.json
+
+# =============================================
+# Claude Code / herramientas locales
+# =============================================
+# settings.local.json contiene allowlist con tokens/URLs embebidos
+.claude/
+
+# =============================================
 # Dependencies
+# =============================================
 node_modules/
 server/node_modules/
 
-# Environment variables (tokens, secrets)
-.env
-server/.env
+# =============================================
+# Build / caché
+# =============================================
+dist/
+build/
+.cache/
+.parcel-cache/
+.vite/
 
-# OS files
+# =============================================
+# Logs
+# =============================================
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# =============================================
+# OS
+# =============================================
 Thumbs.db
 Desktop.ini
 .DS_Store
+ehthumbs.db
 
-# IDE
+# =============================================
+# IDE / editores
+# =============================================
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
 
-# Logs
-*.log
-npm-debug.log*
-
-# Cache
-.cache/
+# =============================================
+# Archivos temporales / backups
+# =============================================
+*.bak
+*.tmp
+*.old
