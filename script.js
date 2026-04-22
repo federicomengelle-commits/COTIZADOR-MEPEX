@@ -1810,17 +1810,6 @@ const Render = {
         const breakdownText = `Subtotal $${Math.round(adjustedSubtotal).toLocaleString('es-AR')} + IVA (21%) $${Math.round(tax).toLocaleString('es-AR')}`;
         doc.text(breakdownText, pageWidth - margin - 8, yPos + 16, { align: 'right' });
 
-        // Leyendas debajo del total
-        yPos += 30;
-        doc.setFontSize(8);
-        doc.setFont('helvetica', 'normal');
-        doc.setTextColor(...mediumGray);
-        doc.text('El presupuesto es en concepto de alquiler', margin, yPos);
-        yPos += 4;
-        doc.text('Incluye armado, desarme, logística', margin, yPos);
-        yPos += 4;
-        doc.text('No incluye diseño del material gráfico', margin, yPos);
-
         // ========================================
         // PIE DE PÁGINA
         // ========================================
@@ -1847,9 +1836,9 @@ const Render = {
         doc.setFontSize(7);
         doc.setFont('helvetica', 'normal');
         doc.setTextColor(...mediumGray);
-        doc.text('La oferta tiene una vigencia de 15 días.', isoX + 14, isoY + 2);
-        doc.text('La forma de pago es a convenir.', isoX + 14, isoY + 6);
-        doc.text(`Ref: ${cotNumber}`, isoX + 14, isoY + 10);
+        doc.text('Presupuesto en concepto de alquiler. Incluye armado, desarme y logística.', isoX + 14, isoY + 1);
+        doc.text('No incluye diseño del material gráfico. Vigencia: 15 días. Forma de pago a convenir.', isoX + 14, isoY + 5);
+        doc.text(`Ref: ${cotNumber}`, isoX + 14, isoY + 9);
 
         // Contacto (derecha)
         const contactX = pageWidth - margin - 55;
