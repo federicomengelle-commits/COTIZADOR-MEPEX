@@ -3227,3 +3227,55 @@ input[type="checkbox"] {
     25% { transform: translateX(-4px); }
     75% { transform: translateX(4px); }
 }
+
+/* ============================================= */
+/* BOTÓN DE FAVORITO EN ITEM CARD                 */
+/* ============================================= */
+.item-fav-btn {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 26px;
+    height: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    color: var(--text-muted, #9a9a9a);
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0;
+    border-radius: 50%;
+    opacity: 0;
+    transition: opacity 0.15s, color 0.15s, background 0.15s, transform 0.15s;
+    z-index: 2;
+}
+
+/* Visible en hover, cuando es favorito, o en modo búsqueda */
+.item-card:hover .item-fav-btn,
+.item-fav-btn.is-fav,
+#items-container.searching .item-fav-btn {
+    opacity: 1;
+}
+
+.item-fav-btn.is-fav {
+    color: #ffb84d;
+    text-shadow: 0 0 6px rgba(255, 184, 77, 0.4);
+}
+
+.item-fav-btn:hover {
+    background: rgba(255, 184, 77, 0.12);
+    color: #ffb84d;
+    transform: scale(1.15);
+}
+
+.item-fav-btn:active {
+    transform: scale(0.95);
+}
+
+/* Asegurar que el header del item no se solape con la estrella */
+.item-card .item-header {
+    padding-right: 28px;
+}

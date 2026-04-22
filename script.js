@@ -147,6 +147,58 @@ function formatEventDateRange(startDate, endDate) {
 }
 
 // =============================================
+// FAVORITES — overlay local (localStorage) sobre el flag del catálogo
+// =============================================
+// El backend marca items con favorite=true (read-only). Este módulo permite
+// al usuario toggle-ar favoritos propios que persisten en el browser.
+// La lógica de render combina: fav = itemDeDB.favorite || Favorites.has(id).
+const Favorites = {
+    _key: 'mepex_user_favorites',
+    _set: new Set(),
+
+    init() {
+        try {
+            const raw = localStorage.getItem(this._key);
+            if (raw) {
+                const arr = JSON.parse(raw);
+                if (Array.isArray(arr)) this._set = new Set(arr);
+            }
+        } catch (e) {
+            console.warn('Favorites: localStorage inválido, reseteando', e);
+            this._set = new Set();
+        }
+    },
+
+    has(itemId) {
+        return this._set.has(itemId);
+    },
+
+    // Combina flag del catálogo con fav local
+    isFavorite(item) {
+        if (!item) return false;
+        return item.favorite === true || this._set.has(item.id);
+    },
+
+    toggle(itemId) {
+        if (this._set.has(itemId)) {
+            this._set.delete(itemId);
+        } else {
+            this._set.add(itemId);
+        }
+        this._persist();
+        return this._set.has(itemId);
+    },
+
+    _persist() {
+        try {
+            localStorage.setItem(this._key, JSON.stringify([...this._set]));
+        } catch (e) {
+            console.warn('Favorites: no se pudo persistir', e);
+        }
+    }
+};
+
+// =============================================
 // STATE MANAGEMENT
 // =============================================
 const State = {
@@ -752,8 +804,8 @@ const Render = {
 
     // Renderiza un grupo de items en un contenedor con lógica de favoritos
     _renderItemGroup(items, container, displayName) {
-        const favorites = items.filter(i => i.favorite === true);
-        const nonFavorites = items.filter(i => i.favorite !== true);
+        const favorites = items.filter(i => Favorites.isFavorite(i));
+        const nonFavorites = items.filter(i => !Favorites.isFavorite(i));
 
         // Fallback graceful: si no hay favoritos, mostrar todos como siempre
         if (favorites.length === 0) {
@@ -830,7 +882,13 @@ const Render = {
             `;
         }
 
+        const isFav = Favorites.isFavorite(item);
+        const favTitle = isFav ? 'Quitar de favoritos' : 'Marcar como favorito';
+
         card.innerHTML = `
+            <button class="item-fav-btn ${isFav ? 'is-fav' : ''}" data-action="fav" data-id="${item.id}" title="${favTitle}" aria-label="${favTitle}">
+                ${isFav ? '★' : '☆'}
+            </button>
             <div class="item-info">
                 <div class="item-header">
                     <span class="item-name">${item.name}</span>
@@ -855,6 +913,19 @@ const Render = {
     },
 
     attachItemListeners() {
+        // Click en botón de favorito (toggle overlay local + re-render)
+        document.querySelectorAll('.item-fav-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const id = btn.dataset.id;
+                const nowFav = Favorites.toggle(id);
+                this.renderItems();
+                if (typeof Toast !== 'undefined') {
+                    Toast.info(nowFav ? '⭐ Agregado a favoritos' : 'Quitado de favoritos', 1500);
+                }
+            });
+        });
+
         // Contadores
         document.querySelectorAll('.btn-count').forEach(btn => {
             btn.addEventListener('click', (e) => {
@@ -2400,6 +2471,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         updateSyncStatus('error', 'Error');
         console.error('❌ API connection error:', error);
     }
+
+    // Cargar favoritos del usuario desde localStorage
+    Favorites.init();
 
     // Initialize render (works with merged DATABASE)
     Render.init();
