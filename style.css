@@ -396,6 +396,83 @@ input[type="checkbox"] {
 
 .summary-param-row.fee-active .param-value {
     color: var(--color-secondary);
+    font-weight: 600;
+}
+
+.summary-param-row.modifier-positive {
+    background: rgba(239, 68, 68, 0.08);
+    padding: 4px 6px;
+    border-radius: var(--radius-sm);
+    margin: 4px -6px;
+}
+
+.summary-param-row.modifier-positive .param-value {
+    color: #ef4444;
+    font-weight: 600;
+}
+
+.summary-param-row.modifier-negative {
+    background: rgba(34, 197, 94, 0.08);
+    padding: 4px 6px;
+    border-radius: var(--radius-sm);
+    margin: 4px -6px;
+}
+
+.summary-param-row.modifier-negative .param-value {
+    color: #22c55e;
+    font-weight: 600;
+}
+
+.summary-param-row.height-aporte {
+    padding: 2px 6px;
+    margin: -2px -6px 2px -6px;
+    font-size: 0.75rem;
+    opacity: 0.8;
+}
+
+.summary-param-row.height-aporte .param-name {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+
+.summary-param-row.height-aporte .param-value {
+    color: var(--color-primary);
+    opacity: 0.85;
+    font-weight: 500;
+}
+
+/* Tint sutil en categorías afectadas por altura */
+.summary-category.cat-height-affected .summary-category-title {
+    color: var(--color-primary);
+}
+
+.cat-altura-hint {
+    margin-left: 6px;
+    padding: 1px 6px;
+    background: rgba(0, 229, 255, 0.15);
+    color: var(--color-primary);
+    border-radius: 10px;
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+    vertical-align: middle;
+}
+
+/* Nota al pie del summary: "no sale en el PDF" */
+.summary-note {
+    margin-top: 12px;
+    padding: 8px 10px;
+    background: rgba(0, 229, 255, 0.06);
+    border-left: 2px solid var(--color-primary);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    font-size: 11px;
+    line-height: 1.4;
+}
+
+.summary-note small {
+    font-size: 11px;
 }
 
 .summary-divider {

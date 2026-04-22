@@ -951,6 +951,19 @@ const Render = {
         if (input?.value.trim()) this.applySearchFilter(input.value.trim());
     },
 
+    // Helper: parse un precio numérico de forma consistente
+    _parsePrice(price) {
+        return typeof price === 'string'
+            ? parseFloat(price.toString().replace(/[^\d.,-]/g, '').replace(',', '.')) || 0
+            : (parseFloat(price) || 0);
+    },
+
+    // Helper: formato de moneda en ARS
+    _fmt(n) {
+        const sign = n < 0 ? '-' : '';
+        return `${sign}$${Math.round(Math.abs(n)).toLocaleString('es-AR')}`;
+    },
+
     updateSummary() {
         const summaryList = document.getElementById('summary-list');
         const subtotalEl = document.getElementById('subtotal-display');
@@ -960,14 +973,62 @@ const Render = {
         const params = State.generalParams;
         const qType = params.quotationType || 'stand';
         const isMultiSpace = State.isMultiSpaceMode();
-        let summaryHTML = '';
 
         const heightAffectedCategories = DATABASE.heightAffectedCategories || ['infrastructure', 'lighting'];
         const currentHeight = DATABASE.heightMultipliers.find(h => h.id === params.heightType);
         const heightLabel = currentHeight ? `${currentHeight.name} (${currentHeight.height})` : 'Estándar';
         const modifierMultiplier = 1 + (params.modifierPercentage / 100);
 
-        // ── Sección de parámetros ──
+        // ──────────────────────────────
+        // Calcular subtotales paralelos para desglose visual
+        //   base     : precio × cantidad (sin ningún ajuste)
+        //   conAlt   : base + aporte altura en categorías afectadas
+        //   conMod   : conAlt × modifierMultiplier
+        //   conFee   : conMod × (1 + feePercentage) si fee activo
+        // ──────────────────────────────
+        const getAllItemsFlat = () => {
+            const flat = [];
+            if (isMultiSpace) {
+                (params.spaces || []).forEach(space => {
+                    Object.entries(space.items || {}).forEach(([id, data]) => {
+                        if (data.quantity <= 0) return;
+                        const item = DB.getItemById(id);
+                        if (item) flat.push({ item, quantity: data.quantity });
+                    });
+                });
+            } else {
+                Object.entries(State.selectedItems).forEach(([id, data]) => {
+                    if (data.quantity <= 0) return;
+                    const item = DB.getItemById(id);
+                    if (item) flat.push({ item, quantity: data.quantity });
+                });
+            }
+            return flat;
+        };
+
+        let subBase = 0;
+        let subConAltura = 0;
+        getAllItemsFlat().forEach(({ item, quantity }) => {
+            const price = this._parsePrice(item.price);
+            const lineBase = price * quantity;
+            subBase += lineBase;
+            const heightMult = heightAffectedCategories.includes(item.category)
+                ? params.heightMultiplier : 1;
+            subConAltura += lineBase * heightMult;
+        });
+        const subConModifier = subConAltura * modifierMultiplier;
+        const subConFee = params.includeFee
+            ? subConModifier * (1 + params.feePercentage)
+            : subConModifier;
+
+        const aporteAltura = subConAltura - subBase;
+        const aporteModifier = subConModifier - subConAltura;
+        const aporteFee = subConFee - subConModifier;
+
+        // ──────────────────────────────
+        // Sección de parámetros con montos
+        // ──────────────────────────────
+        let summaryHTML = '';
         if (qType === 'stand') {
             summaryHTML += `
                 <div class="summary-params">
@@ -983,23 +1044,28 @@ const Render = {
                         <span class="param-name">📏 Altura:</span>
                         <span class="param-value">${heightLabel}${params.heightMultiplier > 1 ? ` [×${params.heightMultiplier}]` : ''}</span>
                     </div>
+                    ${params.heightMultiplier > 1 && aporteAltura > 0 ? `
+                    <div class="summary-param-row height-aporte">
+                        <span class="param-name">&nbsp;&nbsp;↳ Aporte altura:</span>
+                        <span class="param-value">+${this._fmt(aporteAltura)}</span>
+                    </div>
+                    ` : ''}
                     ${params.modifierPercentage !== 0 ? `
                     <div class="summary-param-row ${params.modifierPercentage > 0 ? 'modifier-positive' : 'modifier-negative'}">
-                        <span class="param-name">🔧 ${params.modifierName || 'Modificador'}:</span>
-                        <span class="param-value">${params.modifierPercentage > 0 ? '+' : ''}${params.modifierPercentage}%</span>
+                        <span class="param-name">🔧 ${params.modifierName || 'Modificador'} (${params.modifierPercentage > 0 ? '+' : ''}${params.modifierPercentage}%):</span>
+                        <span class="param-value">${params.modifierPercentage > 0 ? '+' : ''}${this._fmt(aporteModifier)}</span>
                     </div>
                     ` : ''}
                     ${params.includeFee ? `
                     <div class="summary-param-row fee-active">
-                        <span class="param-name">💼 Fee Agencia:</span>
-                        <span class="param-value">+${(params.feePercentage * 100).toFixed(0)}%</span>
+                        <span class="param-name">💼 Fee Agencia (+${(params.feePercentage * 100).toFixed(0)}%):</span>
+                        <span class="param-value">+${this._fmt(aporteFee)}</span>
                     </div>
                     ` : ''}
                 </div>
                 <div class="summary-divider"></div>
             `;
         } else {
-            // Expo/Alquiler: mostrar tipo + fee si activo
             const typeLabel = qType === 'expo' ? '🎪 Expo' : '📦 Alquiler';
             summaryHTML += `
                 <div class="summary-params">
@@ -1011,10 +1077,22 @@ const Render = {
                         <span class="param-name">Espacios:</span>
                         <span class="param-value">${params.spaces.length}</span>
                     </div>
+                    ${params.heightMultiplier > 1 && aporteAltura > 0 ? `
+                    <div class="summary-param-row height-aporte">
+                        <span class="param-name">↳ Aporte altura:</span>
+                        <span class="param-value">+${this._fmt(aporteAltura)}</span>
+                    </div>
+                    ` : ''}
+                    ${params.modifierPercentage !== 0 ? `
+                    <div class="summary-param-row ${params.modifierPercentage > 0 ? 'modifier-positive' : 'modifier-negative'}">
+                        <span class="param-name">🔧 ${params.modifierName || 'Modificador'} (${params.modifierPercentage > 0 ? '+' : ''}${params.modifierPercentage}%):</span>
+                        <span class="param-value">${params.modifierPercentage > 0 ? '+' : ''}${this._fmt(aporteModifier)}</span>
+                    </div>
+                    ` : ''}
                     ${params.includeFee ? `
                     <div class="summary-param-row fee-active">
-                        <span class="param-name">💼 Fee Agencia:</span>
-                        <span class="param-value">+${(params.feePercentage * 100).toFixed(0)}%</span>
+                        <span class="param-name">💼 Fee Agencia (+${(params.feePercentage * 100).toFixed(0)}%):</span>
+                        <span class="param-value">+${this._fmt(aporteFee)}</span>
                     </div>
                     ` : ''}
                 </div>
@@ -1026,16 +1104,12 @@ const Render = {
         // STAND MODE: una sola lista global
         // ──────────────────────────────
         if (!isMultiSpace) {
-            let subtotalLoaded = 0;
-
             const groupedItems = {};
             Object.entries(State.selectedItems).forEach(([id, data]) => {
                 if (data.quantity <= 0) return;
                 const item = DB.getItemById(id);
                 if (item) {
-                    const price = typeof item.price === 'string'
-                        ? parseFloat(item.price.toString().replace(/[^\d.,-]/g, '').replace(',', '.')) || 0
-                        : (parseFloat(item.price) || 0);
+                    const price = this._parsePrice(item.price);
                     const catId = item.category;
                     if (!groupedItems[catId]) groupedItems[catId] = [];
                     groupedItems[catId].push({ ...item, price, quantity: data.quantity });
@@ -1047,8 +1121,8 @@ const Render = {
                     const isHeightAffected = heightAffectedCategories.includes(cat.id);
                     const isInfrastructure = cat.id === 'infrastructure';
 
-                    summaryHTML += `<div class="summary-category">
-                        <div class="summary-category-title">${cat.icon} ${cat.name}${isHeightAffected && params.heightMultiplier > 1 ? ' <small style="opacity:0.6">[×Altura]</small>' : ''}</div>`;
+                    summaryHTML += `<div class="summary-category${isHeightAffected && params.heightMultiplier > 1 ? ' cat-height-affected' : ''}">
+                        <div class="summary-category-title">${cat.icon} ${cat.name}${isHeightAffected && params.heightMultiplier > 1 ? ' <small class="cat-altura-hint">×Altura</small>' : ''}</div>`;
 
                     if (isInfrastructure) {
                         summaryHTML += `
@@ -1058,18 +1132,7 @@ const Render = {
                     }
 
                     groupedItems[cat.id].forEach(item => {
-                        // Cálculo per-item (misma lógica que getLoadedPrice en exportPDF)
-                        let loadedPrice = item.price * modifierMultiplier;
-                        if (heightAffectedCategories.includes(cat.id)) {
-                            loadedPrice *= params.heightMultiplier;
-                        }
-                        if (params.includeFee) {
-                            loadedPrice *= (1 + params.feePercentage);
-                        }
-                        subtotalLoaded += loadedPrice * item.quantity;
-
                         if (isInfrastructure) return;
-
                         summaryHTML += `
                             <div class="summary-item">
                                 <span class="summary-item-name">${item.quantity > 1 ? item.quantity + 'x ' : ''}${item.name}</span>
@@ -1084,24 +1147,14 @@ const Render = {
                 summaryHTML += '<div class="empty-state">No hay items seleccionados</div>';
             }
 
-            summaryList.innerHTML = summaryHTML;
-
-            const tax = subtotalLoaded * 0.21;
-            const total = subtotalLoaded + tax;
-
-            subtotalEl.textContent = `$${Math.round(subtotalLoaded).toLocaleString('es-AR')}`;
-            taxEl.textContent = `$${Math.round(tax).toLocaleString('es-AR')}`;
-            totalEl.textContent = `$${Math.round(total).toLocaleString('es-AR')}`;
-
-            // ──────────────────────────────
-            // EXPO / ALQUILER MODE: desglose por espacio
-            // ──────────────────────────────
+        // ──────────────────────────────
+        // EXPO / ALQUILER MODE: desglose por espacio
+        // ──────────────────────────────
         } else {
-            let grandTotal = 0;
-
             params.spaces.forEach(space => {
-                let spaceTotal = 0;
                 const itemCount = Object.keys(space.items).length;
+                let spaceBase = 0;
+                let spaceConAltura = 0;
 
                 summaryHTML += `
                     <div class="summary-space-block ${space.id === params.activeSpaceId ? 'active-space' : ''}">
@@ -1117,46 +1170,59 @@ const Render = {
                         if (data.quantity <= 0) return;
                         const item = DB.getItemById(id);
                         if (!item) return;
-                        const price = typeof item.price === 'string'
-                            ? parseFloat(item.price.toString().replace(/[^\d.,-]/g, '').replace(',', '.')) || 0
-                            : (parseFloat(item.price) || 0);
-                        const itemTotal = price * data.quantity;
-                        spaceTotal += itemTotal;
+                        const price = this._parsePrice(item.price);
+                        const lineBase = price * data.quantity;
+                        const heightMult = heightAffectedCategories.includes(item.category)
+                            ? params.heightMultiplier : 1;
+                        spaceBase += lineBase;
+                        spaceConAltura += lineBase * heightMult;
+
+                        // Monto mostrado: incluye altura + modifier + fee (consistente con PDF)
+                        let shownTotal = lineBase * heightMult * modifierMultiplier;
+                        if (params.includeFee) shownTotal *= (1 + params.feePercentage);
 
                         summaryHTML += `
                             <div class="summary-item">
                                 <span class="summary-item-name">${data.quantity > 1 ? data.quantity + 'x ' : ''}${item.name}</span>
-                                <span class="summary-item-total">$${Math.round(itemTotal).toLocaleString('es-AR')}</span>
+                                <span class="summary-item-total">${this._fmt(shownTotal)}</span>
                             </div>`;
                     });
                 }
 
+                // Subtotal del espacio con todos los ajustes aplicados
+                let spaceSubtotal = spaceConAltura * modifierMultiplier;
+                if (params.includeFee) spaceSubtotal *= (1 + params.feePercentage);
+
                 summaryHTML += `
                         <div class="summary-space-subtotal">
                             <span>Subtotal</span>
-                            <span>$${Math.round(spaceTotal).toLocaleString('es-AR')}</span>
+                            <span>${this._fmt(spaceSubtotal)}</span>
                         </div>
                     </div>`;
-
-                grandTotal += spaceTotal;
             });
 
             if (params.spaces.length === 0) {
                 summaryHTML += '<div class="empty-state">No hay espacios creados</div>';
             }
-
-            summaryList.innerHTML = summaryHTML;
-
-            let adjustedTotal = grandTotal * modifierMultiplier;
-            if (params.includeFee) adjustedTotal *= (1 + params.feePercentage);
-
-            const tax = adjustedTotal * 0.21;
-            const total = adjustedTotal + tax;
-
-            subtotalEl.textContent = `$${Math.round(adjustedTotal).toLocaleString('es-AR')}`;
-            taxEl.textContent = `$${Math.round(tax).toLocaleString('es-AR')}`;
-            totalEl.textContent = `$${Math.round(total).toLocaleString('es-AR')}`;
         }
+
+        // Nota: los ajustes no salen en el PDF
+        if (params.modifierPercentage !== 0 || params.includeFee || params.heightMultiplier > 1) {
+            summaryHTML += `
+                <div class="summary-note">
+                    <small>ℹ Los ajustes (altura, modificador, fee) están incluidos en los precios. No se detallan en el PDF.</small>
+                </div>`;
+        }
+
+        summaryList.innerHTML = summaryHTML;
+
+        const subtotalFinal = subConFee;
+        const tax = subtotalFinal * 0.21;
+        const total = subtotalFinal + tax;
+
+        subtotalEl.textContent = `$${Math.round(subtotalFinal).toLocaleString('es-AR')}`;
+        taxEl.textContent = `$${Math.round(tax).toLocaleString('es-AR')}`;
+        totalEl.textContent = `$${Math.round(total).toLocaleString('es-AR')}`;
     },
 
     // =============================================
