@@ -3,6 +3,117 @@
 // =============================================
 
 // =============================================
+// TOAST NOTIFICATIONS
+// =============================================
+const Toast = {
+    _container: null,
+
+    _getContainer() {
+        if (!this._container) {
+            this._container = document.getElementById('toast-container');
+            if (!this._container) {
+                this._container = document.createElement('div');
+                this._container.id = 'toast-container';
+                document.body.appendChild(this._container);
+            }
+        }
+        return this._container;
+    },
+
+    show(message, type = 'info', duration = 3500) {
+        const icons = { success: '✓', error: '✕', warning: '⚠', info: 'ℹ' };
+        const toast = document.createElement('div');
+        toast.className = `toast toast-${type}`;
+        toast.innerHTML = `
+            <span class="toast-icon">${icons[type] || icons.info}</span>
+            <span class="toast-message"></span>
+            <button class="toast-close" aria-label="Cerrar">×</button>
+        `;
+        toast.querySelector('.toast-message').textContent = message;
+
+        const close = () => {
+            toast.classList.add('toast-hide');
+            setTimeout(() => toast.remove(), 200);
+        };
+
+        toast.querySelector('.toast-close').addEventListener('click', close);
+        this._getContainer().appendChild(toast);
+
+        if (duration > 0) setTimeout(close, duration);
+        return toast;
+    },
+
+    success(msg, duration) { return this.show(msg, 'success', duration); },
+    error(msg, duration) { return this.show(msg, 'error', duration ?? 5000); },
+    warning(msg, duration) { return this.show(msg, 'warning', duration); },
+    info(msg, duration) { return this.show(msg, 'info', duration); }
+};
+
+// =============================================
+// CONFIRM DIALOG (reemplazo de window.confirm)
+// =============================================
+const Confirm = {
+    /**
+     * Muestra un diálogo de confirmación custom.
+     * @param {Object} opts - { title, message, confirmText, cancelText, danger }
+     * @returns {Promise<boolean>} true si el usuario confirma
+     */
+    show(opts = {}) {
+        return new Promise((resolve) => {
+            const {
+                title = '¿Estás seguro?',
+                message = '',
+                confirmText = 'Confirmar',
+                cancelText = 'Cancelar',
+                danger = false
+            } = opts;
+
+            const overlay = document.createElement('div');
+            overlay.className = 'confirm-overlay';
+            overlay.innerHTML = `
+                <div class="confirm-dialog" role="dialog" aria-modal="true">
+                    <div class="confirm-title"></div>
+                    <div class="confirm-message"></div>
+                    <div class="confirm-actions">
+                        <button class="confirm-btn confirm-btn-cancel"></button>
+                        <button class="confirm-btn ${danger ? 'confirm-btn-danger' : 'confirm-btn-ok'}"></button>
+                    </div>
+                </div>
+            `;
+            overlay.querySelector('.confirm-title').textContent = title;
+            overlay.querySelector('.confirm-message').textContent = message;
+            overlay.querySelector('.confirm-btn-cancel').textContent = cancelText;
+            overlay.querySelector(`.${danger ? 'confirm-btn-danger' : 'confirm-btn-ok'}`).textContent = confirmText;
+
+            const cleanup = (result) => {
+                overlay.remove();
+                document.removeEventListener('keydown', onKey);
+                resolve(result);
+            };
+
+            const onKey = (e) => {
+                if (e.key === 'Escape') cleanup(false);
+                if (e.key === 'Enter') cleanup(true);
+            };
+
+            overlay.querySelector('.confirm-btn-cancel').addEventListener('click', () => cleanup(false));
+            overlay.querySelector(`.${danger ? 'confirm-btn-danger' : 'confirm-btn-ok'}`)
+                .addEventListener('click', () => cleanup(true));
+            overlay.addEventListener('click', (e) => {
+                if (e.target === overlay) cleanup(false);
+            });
+            document.addEventListener('keydown', onKey);
+
+            document.body.appendChild(overlay);
+            // Focus en el botón de confirmación
+            setTimeout(() => {
+                overlay.querySelector(`.${danger ? 'confirm-btn-danger' : 'confirm-btn-ok'}`)?.focus();
+            }, 50);
+        });
+    }
+};
+
+// =============================================
 // UTILIDADES DE FORMATO
 // =============================================
 
