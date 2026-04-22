@@ -120,7 +120,10 @@
                     <!-- Superficie + Frente + Profundidad + Tipo Stand -->
                     <div class="params-row params-row-dimensions">
                         <div class="input-group input-group-compact">
-                            <label for="input-metraje">Superficie</label>
+                            <label for="input-metraje">
+                                Superficie
+                                <span class="help-tip" data-tip="Metros cuadrados totales del stand. Afecta los cálculos automáticos de infraestructura (estructura, piso, etc).">?</span>
+                            </label>
                             <div class="metraje-input">
                                 <input type="number" id="input-metraje" class="number-input" value="25" min="9"
                                     max="500">
@@ -128,7 +131,10 @@
                             </div>
                         </div>
                         <div class="input-group input-group-compact">
-                            <label for="input-frontal">Frente</label>
+                            <label for="input-frontal">
+                                Frente
+                                <span class="help-tip" data-tip="Ancho del lado principal del stand (el que da al pasillo). Dato informativo que se muestra en el PDF.">?</span>
+                            </label>
                             <div class="metraje-input">
                                 <input type="number" id="input-frontal" class="number-input" placeholder="—"
                                     min="1" max="100" step="0.5">
@@ -136,7 +142,10 @@
                             </div>
                         </div>
                         <div class="input-group input-group-compact">
-                            <label for="input-profundidad">Profundidad</label>
+                            <label for="input-profundidad">
+                                Profundidad
+                                <span class="help-tip" data-tip="Profundidad del stand (perpendicular al frente). Dato informativo que se muestra en el PDF.">?</span>
+                            </label>
                             <div class="metraje-input">
                                 <input type="number" id="input-profundidad" class="number-input" placeholder="—"
                                     min="1" max="100" step="0.5">
@@ -205,7 +214,10 @@
                     <div class="params-row params-row-split">
                         <!-- Altura -->
                         <div class="param-inline-group">
-                            <span class="param-inline-label">Altura</span>
+                            <span class="param-inline-label">
+                                Altura
+                                <span class="help-tip" data-tip="Incrementa el precio SOLO de Infraestructura e Iluminación por el factor indicado. Los demás rubros no se ven afectados.">?</span>
+                            </span>
                             <div class="height-inline">
                                 <button class="height-chip active" data-height="standard" data-multiplier="1"
                                     title="Altura estándar - Solo afecta Estructura e Iluminación">
@@ -241,7 +253,10 @@
 
                         <!-- Modificador Personalizado -->
                         <div class="param-inline-group modifier-group">
-                            <span class="param-inline-label">Modificador</span>
+                            <span class="param-inline-label">
+                                Modificador
+                                <span class="help-tip" data-tip="Ajuste global al presupuesto: positivo para recargar (urgencia, complejidad) o negativo para descontar. No aparece detallado en el PDF — solo se absorbe en los precios finales.">?</span>
+                            </span>
                             <div class="modifier-inline">
                                 <input type="text" id="modifier-name" class="modifier-name-input"
                                     placeholder="Ej: Urgencia, Complejidad..." maxlength="30">
@@ -283,7 +298,7 @@
                                 <input type="checkbox" id="fee-checkbox">
                                 <span class="fee-checkmark"></span>
                                 <span class="fee-text">
-                                    <strong>Fee de Agencia</strong>
+                                    <strong>Fee de Agencia <span class="help-tip" data-tip="Comisión que se aplica sobre el subtotal por diseño 3D, renders, coordinación y gestión del proyecto. Se incluye en los precios finales sin aparecer como línea separada en el PDF.">?</span></strong>
                                     <small>Diseño 3D, renders, coordinación y gestión</small>
                                 </span>
                             </label>

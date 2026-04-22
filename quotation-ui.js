@@ -19,7 +19,10 @@ const QuotationUI = {
                     <button class="quot-modal-close" id="quot-modal-close">&times;</button>
                 </div>
                 <div class="quot-modal-body">
-                    <div class="quot-modal-loading">Cargando cotizaciones...</div>
+                    <div class="quot-modal-loading">
+                        <span class="mp-spinner mp-spinner-lg"></span>
+                        <span>Cargando cotizaciones...</span>
+                    </div>
                 </div>
             </div>
         `;
@@ -123,24 +126,36 @@ const QuotationUI = {
             const stateObj = q.fullState || q;
             this._restoreState(stateObj, false);
             this.closeModal();
-            console.log(`📂 Cotización ${stateObj.cotNumber || id} cargada`);
+            if (typeof Toast !== 'undefined') Toast.success(`Cotización ${stateObj.cotNumber || ''} cargada`);
         } catch (e) {
             console.error('❌ Error cargando cotización:', e);
-            alert('No se pudo cargar la cotización');
+            if (typeof Toast !== 'undefined') Toast.error('No se pudo cargar la cotización');
         }
     },
 
     async deleteQuotation(id, name) {
-        if (!confirm(`¿Eliminar la cotización ${name}?`)) return;
+        let confirmed;
+        if (typeof Confirm !== 'undefined') {
+            confirmed = await Confirm.show({
+                title: 'Eliminar cotización',
+                message: `¿Eliminar la cotización ${name}? Esta acción no se puede deshacer.`,
+                confirmText: 'Sí, eliminar',
+                cancelText: 'Cancelar',
+                danger: true
+            });
+        } else {
+            confirmed = confirm(`¿Eliminar la cotización ${name}?`);
+        }
+        if (!confirmed) return;
 
         try {
             await QuotationStorage.deleteQuotation(id);
-            console.log(`🗑️ Cotización ${name} eliminada`);
+            if (typeof Toast !== 'undefined') Toast.success(`Cotización ${name} eliminada`);
             // Refrescar la lista del modal
             this.openModal();
         } catch (e) {
             console.error('❌ Error eliminando cotización:', e);
-            alert('No se pudo eliminar la cotización');
+            if (typeof Toast !== 'undefined') Toast.error('No se pudo eliminar la cotización');
         }
     },
 
@@ -151,10 +166,10 @@ const QuotationUI = {
             const stateObj = q.fullState || q;
             this._restoreState(stateObj, true);
             this.closeModal();
-            console.log(`📋 Cotización ${stateObj.cotNumber || id} usada como base`);
+            if (typeof Toast !== 'undefined') Toast.success(`Cotización ${stateObj.cotNumber || ''} cargada como base`);
         } catch (e) {
             console.error('❌ Error cargando cotización:', e);
-            alert('No se pudo cargar la cotización');
+            if (typeof Toast !== 'undefined') Toast.error('No se pudo cargar la cotización');
         }
     },
 

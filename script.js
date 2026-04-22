@@ -688,10 +688,10 @@ const Render = {
         if (totalItems === 0) {
             mainContainer.innerHTML = `
                 <div class="empty-catalog-state">
-                    <div class="empty-icon">📡</div>
-                    <h3>Conectando con Supabase...</h3>
-                    <p>Los items se cargarán automáticamente desde la base de datos.</p>
-                    <p class="empty-hint">Si el servidor no está corriendo, ejecutá <strong>INICIAR COTIZADOR.bat</strong></p>
+                    <div class="empty-icon"><span class="mp-spinner mp-spinner-lg"></span></div>
+                    <h3>Cargando catálogo...</h3>
+                    <p>Conectando con la base de datos de items.</p>
+                    <p class="empty-hint">Si no carga, verificá que el servidor esté corriendo (<strong>INICIAR COTIZADOR.bat</strong>).</p>
                 </div>
             `;
             return;
