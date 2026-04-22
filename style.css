@@ -4316,6 +4316,10 @@ input[type="checkbox"] {
     padding-bottom: 6px;
 }
 
+.compare-content {
+    min-height: 120px;
+}
+
 .compare-empty,
 .compare-loading {
     text-align: center;
