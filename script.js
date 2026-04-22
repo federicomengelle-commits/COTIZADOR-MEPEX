@@ -371,6 +371,603 @@ const Autosave = {
 };
 
 // =============================================
+// TEMPLATES — presets reusables guardados en localStorage
+// =============================================
+// Permite snapshotear el estado actual (params + items, sin datos de cliente/proyecto/
+// evento/fecha) como un "template" reusable. Al aplicarlo, se pisan los params e items
+// pero se preservan los datos del cliente/proyecto/evento/fecha que ya estén cargados.
+// Casos de uso: stands "base 30m² centro altura standard", presets de alquiler típicos, etc.
+const Templates = {
+    _key: 'mepex_templates',
+    _version: 1,
+
+    list() {
+        try {
+            const raw = localStorage.getItem(this._key);
+            if (!raw) return [];
+            const parsed = JSON.parse(raw);
+            if (!parsed || parsed.v !== this._version || !Array.isArray(parsed.items)) return [];
+            return parsed.items;
+        } catch {
+            return [];
+        }
+    },
+
+    _write(items) {
+        try {
+            localStorage.setItem(this._key, JSON.stringify({ v: this._version, items }));
+            return true;
+        } catch (e) {
+            console.warn('Templates: no se pudo guardar', e.message);
+            return false;
+        }
+    },
+
+    // Snapshotea el State actual excluyendo datos sensibles (cliente/proyecto/evento/fecha).
+    // Devuelve el objeto guardado, o null si falla.
+    saveFromCurrent(name) {
+        const cleanName = (name || '').trim();
+        if (!cleanName) return null;
+
+        // Clonar generalParams y borrar campos que NO forman parte del template
+        const gp = JSON.parse(JSON.stringify(State.generalParams));
+        gp.cliente = '';
+        gp.clienteData = null;
+        gp.proyecto = '';
+        gp.proyectoData = null;
+        gp.evento = '';
+        gp.eventoData = null;
+        gp.fecha = '';
+
+        // Los spaces sí se preservan enteros (un template puede incluir espacios tipo)
+        const snapshot = {
+            generalParams: gp,
+            selectedItems: JSON.parse(JSON.stringify(State.selectedItems || {})),
+            spaceCounter: State._spaceCounter || 0
+        };
+
+        const tpl = {
+            id: `tpl_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+            name: cleanName,
+            createdAt: Date.now(),
+            snapshot
+        };
+
+        const items = this.list();
+        items.push(tpl);
+        if (!this._write(items)) return null;
+        return tpl;
+    },
+
+    delete(id) {
+        const items = this.list().filter(t => t.id !== id);
+        return this._write(items);
+    },
+
+    // Aplica un template al State. Preserva cliente/proyecto/evento/fecha actuales.
+    apply(id) {
+        const tpl = this.list().find(t => t.id === id);
+        if (!tpl || !tpl.snapshot) return false;
+
+        // Suspendemos autosave durante la aplicación para no disparar saves en cadena
+        if (typeof Autosave !== 'undefined') Autosave._suspended = true;
+        try {
+            // Backup de datos actuales del cliente — se preservan
+            const preserved = {
+                cliente: State.generalParams.cliente,
+                clienteData: State.generalParams.clienteData,
+                proyecto: State.generalParams.proyecto,
+                proyectoData: State.generalParams.proyectoData,
+                evento: State.generalParams.evento,
+                eventoData: State.generalParams.eventoData,
+                fecha: State.generalParams.fecha
+            };
+
+            const snap = tpl.snapshot;
+            State.selectedItems = JSON.parse(JSON.stringify(snap.selectedItems || {}));
+            State.generalParams = { ...State.generalParams, ...snap.generalParams, ...preserved };
+            if (typeof snap.spaceCounter === 'number') State._spaceCounter = snap.spaceCounter;
+
+            // Re-render completo
+            if (typeof Render.resetGeneralParamsUI === 'function') Render.resetGeneralParamsUI();
+            if (typeof Render.updateLayoutForType === 'function') {
+                Render.updateLayoutForType(State.generalParams.quotationType);
+            }
+            if (typeof Render.renderSpacesTabs === 'function') Render.renderSpacesTabs();
+            if (typeof Render.renderItems === 'function') Render.renderItems();
+            if (typeof Render.updateAll === 'function') Render.updateAll();
+
+            return true;
+        } catch (e) {
+            console.error('Templates: error aplicando template', e);
+            return false;
+        } finally {
+            if (typeof Autosave !== 'undefined') Autosave._suspended = false;
+        }
+    },
+
+    _escapeHTML(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, m => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        }[m]));
+    },
+
+    _describeSnapshot(tpl) {
+        const gp = tpl.snapshot?.generalParams || {};
+        const items = tpl.snapshot?.selectedItems || {};
+        const spaces = Array.isArray(gp.spaces) ? gp.spaces.length : 0;
+        const qType = (gp.quotationType || 'stand').toUpperCase();
+        const itemCount = Object.values(items).filter(d => (d?.quantity || 0) > 0).length;
+
+        const parts = [qType];
+        if (gp.quotationType === 'stand') {
+            parts.push(`${gp.metraje || 0}m²`);
+            if (gp.standType) parts.push(gp.standType);
+        } else {
+            parts.push(`${spaces} espacio${spaces === 1 ? '' : 's'}`);
+        }
+        if (itemCount > 0) parts.push(`${itemCount} item${itemCount === 1 ? '' : 's'}`);
+        return parts.join(' · ');
+    },
+
+    openModal() {
+        this.closeModal();
+
+        const overlay = document.createElement('div');
+        overlay.id = 'templates-modal';
+        overlay.className = 'quot-modal-overlay';
+        overlay.setAttribute('role', 'dialog');
+        overlay.setAttribute('aria-label', 'Templates de cotización');
+        overlay.innerHTML = `
+            <div class="quot-modal templates-modal">
+                <div class="quot-modal-header">
+                    <h2>Templates (Presets)</h2>
+                    <button class="quot-modal-close" id="templates-modal-close" aria-label="Cerrar">&times;</button>
+                </div>
+                <div class="quot-modal-body">
+                    <div class="templates-save-row">
+                        <input type="text" id="template-name-input" class="input-base" placeholder="Nombre del template (ej: Stand 30m² base)" maxlength="60" />
+                        <button type="button" id="btn-save-template" class="btn-primary">Guardar actual</button>
+                    </div>
+                    <div class="templates-save-hint">Guarda los parámetros e items actuales. <strong>No</strong> guarda cliente/proyecto/evento/fecha.</div>
+                    <div class="templates-list" id="templates-list"></div>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(overlay);
+
+        overlay.querySelector('#templates-modal-close').addEventListener('click', () => this.closeModal());
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) this.closeModal();
+        });
+
+        const nameInput = overlay.querySelector('#template-name-input');
+        const saveBtn = overlay.querySelector('#btn-save-template');
+
+        const doSave = () => {
+            const name = nameInput.value.trim();
+            if (!name) {
+                if (typeof Toast !== 'undefined') Toast.error('Poné un nombre para el template');
+                nameInput.focus();
+                return;
+            }
+            const tpl = this.saveFromCurrent(name);
+            if (tpl) {
+                nameInput.value = '';
+                this._renderList(overlay);
+                if (typeof Toast !== 'undefined') Toast.success(`Template "${name}" guardado`);
+            } else {
+                if (typeof Toast !== 'undefined') Toast.error('No se pudo guardar el template');
+            }
+        };
+
+        saveBtn.addEventListener('click', doSave);
+        nameInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') doSave();
+        });
+
+        this._renderList(overlay);
+        setTimeout(() => nameInput.focus(), 50);
+    },
+
+    _renderList(overlay) {
+        const list = overlay.querySelector('#templates-list');
+        if (!list) return;
+        const items = this.list().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+
+        if (items.length === 0) {
+            list.innerHTML = '<div class="quot-modal-empty">No hay templates guardados todavía</div>';
+            return;
+        }
+
+        list.innerHTML = items.map(tpl => {
+            const dateStr = tpl.createdAt
+                ? new Date(tpl.createdAt).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+                : '—';
+            return `
+                <div class="template-row" data-id="${this._escapeHTML(tpl.id)}">
+                    <div class="template-row-info">
+                        <span class="template-row-name">${this._escapeHTML(tpl.name)}</span>
+                        <span class="template-row-meta">${this._escapeHTML(this._describeSnapshot(tpl))}</span>
+                        <span class="template-row-date">${dateStr}</span>
+                    </div>
+                    <div class="template-row-actions">
+                        <button type="button" class="btn-primary btn-apply-template" data-id="${this._escapeHTML(tpl.id)}">Aplicar</button>
+                        <button type="button" class="quot-btn-delete btn-delete-template" data-id="${this._escapeHTML(tpl.id)}" data-name="${this._escapeHTML(tpl.name)}" aria-label="Borrar template">✕</button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        list.querySelectorAll('.btn-apply-template').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const id = btn.dataset.id;
+                const ok = this.apply(id);
+                if (ok) {
+                    this.closeModal();
+                    if (typeof Toast !== 'undefined') Toast.success('Template aplicado');
+                } else {
+                    if (typeof Toast !== 'undefined') Toast.error('No se pudo aplicar el template');
+                }
+            });
+        });
+
+        list.querySelectorAll('.btn-delete-template').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const id = btn.dataset.id;
+                const name = btn.dataset.name || 'template';
+                let confirmed;
+                if (typeof Confirm !== 'undefined') {
+                    confirmed = await Confirm.show({
+                        title: 'Borrar template',
+                        message: `¿Borrar el template "${name}"? Esta acción no se puede deshacer.`,
+                        confirmText: 'Sí, borrar',
+                        cancelText: 'Cancelar',
+                        danger: true
+                    });
+                } else {
+                    confirmed = confirm(`¿Borrar el template "${name}"?`);
+                }
+                if (!confirmed) return;
+                this.delete(id);
+                this._renderList(overlay);
+                if (typeof Toast !== 'undefined') Toast.success(`Template "${name}" borrado`);
+            });
+        });
+    },
+
+    closeModal() {
+        const m = document.getElementById('templates-modal');
+        if (m) m.remove();
+    }
+};
+
+// =============================================
+// COMPARE — comparador side-by-side de cotizaciones guardadas
+// =============================================
+// Permite elegir 2 cotizaciones guardadas y verlas lado a lado. Calcula totales
+// con la lógica actual (no usa el total que quedó guardado, para que una
+// actualización de precios se refleje). Resalta diferencias clave en totales.
+const Compare = {
+
+    async openModal() {
+        this.closeModal();
+
+        const overlay = document.createElement('div');
+        overlay.id = 'compare-modal';
+        overlay.className = 'quot-modal-overlay';
+        overlay.setAttribute('role', 'dialog');
+        overlay.setAttribute('aria-label', 'Comparador de cotizaciones');
+        overlay.innerHTML = `
+            <div class="quot-modal compare-modal">
+                <div class="quot-modal-header">
+                    <h2>Comparador de cotizaciones</h2>
+                    <button class="quot-modal-close" id="compare-modal-close" aria-label="Cerrar">&times;</button>
+                </div>
+                <div class="quot-modal-body">
+                    <div class="compare-selectors">
+                        <div class="compare-selector-group">
+                            <label for="compare-select-a">Cotización A</label>
+                            <select id="compare-select-a" class="input-base"><option value="">Cargando…</option></select>
+                        </div>
+                        <div class="compare-vs">VS</div>
+                        <div class="compare-selector-group">
+                            <label for="compare-select-b">Cotización B</label>
+                            <select id="compare-select-b" class="input-base"><option value="">Cargando…</option></select>
+                        </div>
+                    </div>
+                    <div class="compare-content" id="compare-content">
+                        <div class="compare-empty">Elegí dos cotizaciones para compararlas</div>
+                    </div>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(overlay);
+
+        overlay.querySelector('#compare-modal-close').addEventListener('click', () => this.closeModal());
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) this.closeModal();
+        });
+
+        // Cargar lista de cotizaciones y poblar los selects
+        let quotations = [];
+        try {
+            quotations = await QuotationStorage.getQuotations();
+            if (!Array.isArray(quotations)) quotations = [];
+            quotations.sort((a, b) => {
+                const dateA = a.savedAt || a.updatedAt || a.createdAt || '';
+                const dateB = b.savedAt || b.updatedAt || b.createdAt || '';
+                return new Date(dateB) - new Date(dateA);
+            });
+        } catch (e) {
+            console.error('❌ Error cargando cotizaciones para comparar:', e);
+        }
+
+        const selectA = overlay.querySelector('#compare-select-a');
+        const selectB = overlay.querySelector('#compare-select-b');
+
+        if (quotations.length === 0) {
+            const empty = '<option value="">Sin cotizaciones guardadas</option>';
+            selectA.innerHTML = empty;
+            selectB.innerHTML = empty;
+            const content = overlay.querySelector('#compare-content');
+            if (content) content.innerHTML = '<div class="compare-empty">No hay cotizaciones guardadas todavía</div>';
+            return;
+        }
+
+        const optionsHTML = ['<option value="">— elegir —</option>']
+            .concat(quotations.map(q => {
+                const label = `${q.cotNumber || q.name || q.id} — ${q.params?.client?.name || '—'}`;
+                return `<option value="${this._escapeHTML(q.id)}">${this._escapeHTML(label)}</option>`;
+            }))
+            .join('');
+        selectA.innerHTML = optionsHTML;
+        selectB.innerHTML = optionsHTML;
+
+        const onChange = async () => {
+            const idA = selectA.value;
+            const idB = selectB.value;
+            if (!idA || !idB) {
+                overlay.querySelector('#compare-content').innerHTML = '<div class="compare-empty">Elegí dos cotizaciones para compararlas</div>';
+                return;
+            }
+            if (idA === idB) {
+                overlay.querySelector('#compare-content').innerHTML = '<div class="compare-empty">Elegí dos cotizaciones distintas</div>';
+                return;
+            }
+            await this._renderComparison(overlay, idA, idB);
+        };
+
+        selectA.addEventListener('change', onChange);
+        selectB.addEventListener('change', onChange);
+    },
+
+    async _renderComparison(overlay, idA, idB) {
+        const content = overlay.querySelector('#compare-content');
+        if (!content) return;
+        content.innerHTML = '<div class="compare-loading"><span class="mp-spinner mp-spinner-lg"></span> Cargando…</div>';
+
+        let qA, qB;
+        try {
+            [qA, qB] = await Promise.all([
+                QuotationStorage.getQuotationById(idA),
+                QuotationStorage.getQuotationById(idB)
+            ]);
+        } catch (e) {
+            console.error('❌ Error cargando cotizaciones para comparar:', e);
+            content.innerHTML = '<div class="compare-empty">No se pudieron cargar las cotizaciones</div>';
+            return;
+        }
+
+        if (!qA || !qB) {
+            content.innerHTML = '<div class="compare-empty">No se pudieron cargar las cotizaciones</div>';
+            return;
+        }
+
+        const summA = this._summarizeQuotation(qA);
+        const summB = this._summarizeQuotation(qB);
+
+        const fmt = (n) => `$${(n || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        const deltaPct = (a, b) => {
+            if (!a) return b ? '+∞%' : '0%';
+            const d = ((b - a) / a) * 100;
+            const sign = d > 0 ? '+' : '';
+            return `${sign}${d.toFixed(1)}%`;
+        };
+        const diffClass = (a, b) => a === b ? '' : 'compare-diff';
+
+        const col = (summ, label) => `
+            <div class="compare-col">
+                <div class="compare-col-header">
+                    <div class="compare-col-label">${label}</div>
+                    <div class="compare-col-cot">${this._escapeHTML(summ.cotNumber || '—')}</div>
+                </div>
+                <div class="compare-col-meta">
+                    <div><strong>Cliente:</strong> ${this._escapeHTML(summ.clientName)}</div>
+                    <div><strong>Proyecto:</strong> ${this._escapeHTML(summ.projectName)}</div>
+                    <div><strong>Evento:</strong> ${this._escapeHTML(summ.eventName)}</div>
+                    <div><strong>Tipo:</strong> ${this._escapeHTML(summ.qType.toUpperCase())}</div>
+                    <div><strong>Fecha guardado:</strong> ${this._escapeHTML(summ.dateStr)}</div>
+                </div>
+            </div>
+        `;
+
+        const pRow = (label, a, b, formatter = fmt) => `
+            <tr>
+                <td class="compare-row-label">${this._escapeHTML(label)}</td>
+                <td class="compare-row-val ${diffClass(a, b)}">${formatter(a)}</td>
+                <td class="compare-row-val ${diffClass(a, b)}">${formatter(b)}</td>
+            </tr>
+        `;
+
+        // Items diff (presencia de items por id)
+        const idsA = new Set(Object.keys(summA.itemsMap));
+        const idsB = new Set(Object.keys(summB.itemsMap));
+        const onlyA = [...idsA].filter(x => !idsB.has(x));
+        const onlyB = [...idsB].filter(x => !idsA.has(x));
+        const both = [...idsA].filter(x => idsB.has(x));
+        const qtyChanged = both.filter(id => summA.itemsMap[id].qty !== summB.itemsMap[id].qty);
+
+        const renderItemList = (ids, map, cls) => {
+            if (ids.length === 0) return '<div class="compare-items-empty">—</div>';
+            return ids.slice(0, 30).map(id => {
+                const it = map[id];
+                return `<div class="compare-item ${cls}"><span class="compare-item-qty">${it.qty}x</span> <span class="compare-item-name">${this._escapeHTML(it.name)}</span></div>`;
+            }).join('') + (ids.length > 30 ? `<div class="compare-items-more">+${ids.length - 30} más…</div>` : '');
+        };
+
+        content.innerHTML = `
+            <div class="compare-grid">
+                ${col(summA, 'A')}
+                ${col(summB, 'B')}
+            </div>
+
+            <table class="compare-table">
+                <thead>
+                    <tr>
+                        <th></th>
+                        <th>A</th>
+                        <th>B <span class="compare-delta">${deltaPct(summA.total, summB.total)}</span></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${pRow('Items (cant.)', summA.itemCount, summB.itemCount, (n) => String(n || 0))}
+                    ${pRow('Superficie/Espacios', summA.scaleLabel, summB.scaleLabel, (v) => this._escapeHTML(String(v || '—')))}
+                    ${pRow('Altura', summA.heightLabel, summB.heightLabel, (v) => this._escapeHTML(String(v || '—')))}
+                    ${pRow('Modificador', summA.modifierLabel, summB.modifierLabel, (v) => this._escapeHTML(String(v || '—')))}
+                    ${pRow('Fee', summA.feeLabel, summB.feeLabel, (v) => this._escapeHTML(String(v || '—')))}
+                    ${pRow('Subtotal', summA.subtotal, summB.subtotal)}
+                    ${pRow('IVA (21%)', summA.tax, summB.tax)}
+                    <tr class="compare-row-total">
+                        <td class="compare-row-label"><strong>TOTAL</strong></td>
+                        <td class="compare-row-val ${diffClass(summA.total, summB.total)}"><strong>${fmt(summA.total)}</strong></td>
+                        <td class="compare-row-val ${diffClass(summA.total, summB.total)}"><strong>${fmt(summB.total)}</strong></td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <div class="compare-items-section">
+                <h3>Diferencias de items</h3>
+                <div class="compare-items-grid">
+                    <div class="compare-items-col">
+                        <div class="compare-items-title compare-only-a">Solo en A (${onlyA.length})</div>
+                        ${renderItemList(onlyA, summA.itemsMap, 'only-a')}
+                    </div>
+                    <div class="compare-items-col">
+                        <div class="compare-items-title compare-only-b">Solo en B (${onlyB.length})</div>
+                        ${renderItemList(onlyB, summB.itemsMap, 'only-b')}
+                    </div>
+                    <div class="compare-items-col">
+                        <div class="compare-items-title compare-qty-changed">Cantidad distinta (${qtyChanged.length})</div>
+                        ${qtyChanged.length === 0 ? '<div class="compare-items-empty">—</div>' :
+                            qtyChanged.slice(0, 30).map(id => `
+                                <div class="compare-item qty-changed">
+                                    <span class="compare-item-name">${this._escapeHTML(summA.itemsMap[id].name)}</span>
+                                    <span class="compare-item-qty-diff">${summA.itemsMap[id].qty} → ${summB.itemsMap[id].qty}</span>
+                                </div>
+                            `).join('') + (qtyChanged.length > 30 ? `<div class="compare-items-more">+${qtyChanged.length - 30} más…</div>` : '')
+                        }
+                    </div>
+                </div>
+            </div>
+        `;
+    },
+
+    // Recalcula totales usando la lógica actual (precios actuales del DATABASE),
+    // para que el comparador muestre totales comparables aún si los precios cambiaron.
+    _summarizeQuotation(q) {
+        const params = q.params || {};
+        const qType = q.type || 'stand';
+        const heightAffected = DATABASE.heightAffectedCategories || ['infrastructure', 'lighting'];
+        const hMult = params.height?.multiplier || 1;
+        const modMult = 1 + ((params.modifier?.percentage || 0) / 100);
+        const feeMult = params.fee?.enabled ? (1 + (params.fee.percentage || 0) / 100) : 1;
+
+        const itemsMap = {};
+        let subtotal = 0;
+        let itemCount = 0;
+
+        const processItem = (entry) => {
+            const id = entry.id;
+            const qty = entry.quantity || 0;
+            if (qty <= 0) return;
+            const cur = DB.getItemById(id);
+            const name = cur?.name || entry.name || id;
+            const base = cur ? (typeof Render !== 'undefined' && Render._parsePrice ? Render._parsePrice(cur.price) : parseFloat(cur.price) || 0) : 0;
+            const cat = cur?.category;
+            const h = heightAffected.includes(cat) ? hMult : 1;
+            const loaded = base * h * modMult * feeMult;
+            const sub = loaded * qty;
+            subtotal += sub;
+            itemCount += 1;
+            // Si el mismo id aparece en varios spaces, acumulamos cantidad
+            if (itemsMap[id]) {
+                itemsMap[id].qty += qty;
+                itemsMap[id].subtotal += sub;
+            } else {
+                itemsMap[id] = { name, qty, subtotal: sub };
+            }
+        };
+
+        if (qType === 'stand') {
+            (q.items || []).forEach(processItem);
+        } else {
+            (q.spaces || []).forEach(space => {
+                (space.items || []).forEach(processItem);
+            });
+        }
+
+        const tax = subtotal * 0.21;
+        const total = subtotal + tax;
+
+        const heightLabel = params.height
+            ? `${params.height.name || ''}${params.height.multiplier ? ` (x${params.height.multiplier})` : ''}`.trim() || '—'
+            : '—';
+        const modifierLabel = params.modifier && (params.modifier.percentage || 0) !== 0
+            ? `${params.modifier.name || 's/n'} (${params.modifier.percentage}%)`
+            : '—';
+        const feeLabel = params.fee?.enabled ? `${params.fee.percentage}%` : '—';
+        const scaleLabel = qType === 'stand'
+            ? `${params.surface || 0}m² · ${params.standType || ''}`
+            : `${(q.spaces || []).length} espacio${(q.spaces || []).length === 1 ? '' : 's'}`;
+
+        const dateSource = q.savedAt || q.date || q.updatedAt || q.createdAt;
+        const dateStr = dateSource
+            ? new Date(dateSource).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+            : '—';
+
+        return {
+            cotNumber: q.cotNumber || q.name || '—',
+            clientName: params.client?.name || '—',
+            projectName: params.project?.name || '—',
+            eventName: params.event?.name || '—',
+            qType,
+            dateStr,
+            itemCount,
+            itemsMap,
+            subtotal,
+            tax,
+            total,
+            heightLabel,
+            modifierLabel,
+            feeLabel,
+            scaleLabel
+        };
+    },
+
+    _escapeHTML(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, m => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        }[m]));
+    },
+
+    closeModal() {
+        const m = document.getElementById('compare-modal');
+        if (m) m.remove();
+    }
+};
+
+// =============================================
 // STATE MANAGEMENT
 // =============================================
 const State = {
@@ -616,6 +1213,17 @@ const Render = {
         // Bind global actions
         document.getElementById('btn-reset')?.addEventListener('click', () => this.handleReset());
         document.getElementById('btn-export')?.addEventListener('click', () => this.handleExport());
+        document.getElementById('btn-preview')?.addEventListener('click', () => this.handlePreview());
+        document.getElementById('btn-export-csv')?.addEventListener('click', () => this.handleExportCSV());
+        document.getElementById('btn-load-quotation')?.addEventListener('click', () => {
+            if (typeof QuotationUI !== 'undefined') QuotationUI.openModal();
+        });
+        document.getElementById('btn-templates')?.addEventListener('click', () => {
+            if (typeof Templates !== 'undefined') Templates.openModal();
+        });
+        document.getElementById('btn-compare')?.addEventListener('click', () => {
+            if (typeof Compare !== 'undefined') Compare.openModal();
+        });
         // btn-admin se vincula en renderNav()
 
         // Quotation type selector (en params section)
@@ -2387,7 +2995,7 @@ const Render = {
         });
     },
 
-    async handleExport() {
+    async handleExport(options = {}) {
         const errors = this.validateForExport();
         if (errors.length > 0) {
             errors.forEach(err => {
@@ -2402,17 +3010,18 @@ const Render = {
             return;
         }
 
-        const btn = document.getElementById('btn-export');
+        const isPreview = !!options.preview;
+        const btn = document.getElementById(isPreview ? 'btn-preview' : 'btn-export');
         if (!btn) return;
 
         const originalHTML = btn.innerHTML;
         btn.classList.add('is-loading');
         btn.disabled = true;
-        btn.innerHTML = '<span class="mp-spinner"></span>Generando PDF...';
+        btn.innerHTML = `<span class="mp-spinner"></span>${isPreview ? 'Preparando vista previa...' : 'Generando PDF...'}`;
 
         try {
-            await this.exportPDF();
-            Toast.success('PDF generado correctamente');
+            await this.exportPDF(options);
+            if (!isPreview) Toast.success('PDF generado correctamente');
         } catch (e) {
             console.error('❌ Error generando PDF:', e);
             Toast.error('No se pudo generar el PDF. Revisá la consola.');
@@ -2423,7 +3032,144 @@ const Render = {
         }
     },
 
-    async exportPDF() {
+    // Handler para el botón de preview
+    async handlePreview() {
+        return this.handleExport({ preview: true });
+    },
+
+    // =============================================
+    // EXPORT CSV — items + totales en un CSV listo para Excel
+    // =============================================
+    handleExportCSV() {
+        const params = State.generalParams;
+        const isMultiSpace = State.isMultiSpaceMode();
+        const qType = params.quotationType || 'stand';
+
+        // Validación mínima: al menos 1 item
+        const itemCount = isMultiSpace
+            ? (params.spaces || []).reduce((sum, s) =>
+                sum + Object.values(s.items || {}).filter(d => d.quantity > 0).length, 0)
+            : Object.values(State.selectedItems).filter(d => d.quantity > 0).length;
+
+        if (itemCount === 0) {
+            Toast.error('Agregá al menos un item antes de exportar');
+            return;
+        }
+
+        const heightAffected = DATABASE.heightAffectedCategories || ['infrastructure', 'lighting'];
+        const hMult = params.heightMultiplier || 1;
+        const modMult = 1 + ((params.modifierPercentage || 0) / 100);
+        const feeMult = params.includeFee ? (1 + params.feePercentage) : 1;
+
+        // Construir filas: header + metadata + items + totales
+        const rows = [];
+
+        // Bloque de metadata
+        rows.push(['MEPEX — Cotización']);
+        rows.push(['Cliente', params.cliente || '']);
+        rows.push(['Proyecto', params.proyecto || '']);
+        rows.push(['Evento', params.evento || '']);
+        rows.push(['Tipo', qType.toUpperCase()]);
+        if (qType === 'stand') {
+            rows.push(['Superficie', `${params.metraje}m²`]);
+            rows.push(['Tipo de Stand', params.standType || '']);
+            const heightData = DATABASE.heightMultipliers.find(h => h.id === params.heightType);
+            rows.push(['Altura', heightData ? `${heightData.name} (${heightData.height})` : '']);
+        } else {
+            rows.push(['Espacios', String((params.spaces || []).length)]);
+        }
+        if ((params.modifierPercentage || 0) !== 0) {
+            rows.push(['Modificador', `${params.modifierName || ''} (${params.modifierPercentage}%)`]);
+        }
+        if (params.includeFee) {
+            rows.push(['Fee Agencia', `${(params.feePercentage * 100).toFixed(0)}%`]);
+        }
+        rows.push(['Fecha', new Date().toLocaleDateString('es-AR')]);
+        rows.push([]); // línea en blanco
+
+        // Tabla de items
+        rows.push(['Espacio', 'Categoría', 'Código', 'Item', 'Unidad', 'Cantidad', 'Precio Base', 'Precio c/ajustes', 'Subtotal']);
+
+        let runningTotal = 0;
+        const pushItem = (item, qty, spaceName = '') => {
+            const base = this._parsePrice(item.price);
+            const h = heightAffected.includes(item.category) ? hMult : 1;
+            const loadedUnit = base * h * modMult * feeMult;
+            const subtotal = loadedUnit * qty;
+            runningTotal += subtotal;
+            const cat = DB.getCategories().find(c => c.id === item.category);
+            rows.push([
+                spaceName,
+                cat ? cat.name : (item.category || ''),
+                item.code || '',
+                item.name || '',
+                item.unit || '',
+                qty,
+                base.toFixed(2),
+                loadedUnit.toFixed(2),
+                subtotal.toFixed(2)
+            ]);
+        };
+
+        if (isMultiSpace) {
+            (params.spaces || []).forEach(space => {
+                Object.entries(space.items || {}).forEach(([id, data]) => {
+                    if (data.quantity <= 0) return;
+                    const item = DB.getItemById(id);
+                    if (item) pushItem(item, data.quantity, space.name);
+                });
+            });
+        } else {
+            Object.entries(State.selectedItems).forEach(([id, data]) => {
+                if (data.quantity <= 0) return;
+                const item = DB.getItemById(id);
+                if (item) pushItem(item, data.quantity);
+            });
+        }
+
+        // Totales
+        const tax = runningTotal * 0.21;
+        const total = runningTotal + tax;
+        rows.push([]);
+        rows.push(['', '', '', '', '', '', '', 'Subtotal', runningTotal.toFixed(2)]);
+        rows.push(['', '', '', '', '', '', '', 'IVA (21%)', tax.toFixed(2)]);
+        rows.push(['', '', '', '', '', '', '', 'TOTAL', total.toFixed(2)]);
+
+        // Serializar a CSV — RFC 4180 con separador `,` y BOM para que Excel abra bien UTF-8
+        const csvEscape = (v) => {
+            if (v === null || v === undefined) return '';
+            const s = String(v);
+            if (/[,"\r\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+            return s;
+        };
+        const csv = rows.map(r => r.map(csvEscape).join(',')).join('\r\n');
+        const BOM = '\uFEFF';
+
+        // Descarga
+        try {
+            const blob = new Blob([BOM + csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const safeCliente = (params.cliente || 'cotizacion')
+                .replace(/[^a-zA-Z0-9_-]+/g, '_').slice(0, 40) || 'cotizacion';
+            const today = new Date().toISOString().split('T')[0];
+            const fileName = `MEPEX_${safeCliente}_${today}.csv`;
+
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+            Toast.success(`CSV exportado: ${fileName}`);
+        } catch (e) {
+            console.error('❌ Error exportando CSV:', e);
+            Toast.error('No se pudo exportar el CSV');
+        }
+    },
+
+    async exportPDF(options = {}) {
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF({
             orientation: 'portrait',
@@ -2978,6 +3724,13 @@ const Render = {
             console.warn('⚠️ No se pudo generar el blob del PDF (se guardará igualmente):', e);
         }
 
+        // Modo preview: mostrar en modal antes de descargar/guardar.
+        // El user decide desde el modal si descarga y guarda, o descarta.
+        if (options.preview && pdfBlob) {
+            this._showPDFPreview(pdfBlob, doc, fileName, cotNumber);
+            return;
+        }
+
         doc.save(fileName);
 
         // Guardar cotización (API + localStorage) + subir PDF a Supabase en background
@@ -2986,6 +3739,79 @@ const Render = {
                 console.error('Error guardando cotización:', e)
             );
         }
+    },
+
+    // Modal de vista previa del PDF. El user decide si descargar+guardar o descartar.
+    _showPDFPreview(pdfBlob, doc, fileName, cotNumber) {
+        const url = URL.createObjectURL(pdfBlob);
+
+        const overlay = document.createElement('div');
+        overlay.className = 'pdf-preview-overlay';
+        overlay.setAttribute('role', 'dialog');
+        overlay.setAttribute('aria-label', 'Vista previa del PDF');
+        overlay.innerHTML = `
+            <div class="pdf-preview-modal">
+                <div class="pdf-preview-header">
+                    <div class="pdf-preview-title">
+                        <span class="pdf-preview-icon">📄</span>
+                        <div>
+                            <div class="pdf-preview-cot">${cotNumber}</div>
+                            <div class="pdf-preview-meta">Vista previa — no se descargó todavía</div>
+                        </div>
+                    </div>
+                    <button type="button" class="pdf-preview-close" aria-label="Cerrar">✕</button>
+                </div>
+                <div class="pdf-preview-iframe-wrap">
+                    <iframe class="pdf-preview-iframe" src="${url}" title="Preview PDF"></iframe>
+                </div>
+                <div class="pdf-preview-footer">
+                    <button type="button" class="btn-secondary pdf-preview-cancel">Cancelar</button>
+                    <button type="button" class="btn-primary pdf-preview-download">Descargar y guardar</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(overlay);
+
+        let cleaned = false;
+        const cleanup = () => {
+            if (cleaned) return;
+            cleaned = true;
+            try { URL.revokeObjectURL(url); } catch { /* silent */ }
+            overlay.remove();
+        };
+
+        overlay.querySelector('.pdf-preview-close').addEventListener('click', cleanup);
+        overlay.querySelector('.pdf-preview-cancel').addEventListener('click', cleanup);
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) cleanup();
+        });
+
+        // Esc cierra
+        const onKey = (e) => {
+            if (e.key === 'Escape') {
+                cleanup();
+                document.removeEventListener('keydown', onKey);
+            }
+        };
+        document.addEventListener('keydown', onKey);
+
+        // Descargar y guardar: usamos doc.save() para mantener el mismo flujo que antes,
+        // y después delegamos a QuotationStorage para persistir
+        overlay.querySelector('.pdf-preview-download').addEventListener('click', () => {
+            try {
+                doc.save(fileName);
+                if (typeof QuotationStorage !== 'undefined') {
+                    QuotationStorage.saveQuotation(cotNumber, pdfBlob).catch(e =>
+                        console.error('Error guardando cotización:', e)
+                    );
+                }
+                if (typeof Toast !== 'undefined') Toast.success('PDF descargado y guardado');
+            } catch (e) {
+                console.error('❌ Error descargando PDF:', e);
+                if (typeof Toast !== 'undefined') Toast.error('No se pudo descargar el PDF');
+            }
+            cleanup();
+        });
     }
 
 };

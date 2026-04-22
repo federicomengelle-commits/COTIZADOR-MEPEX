@@ -89,8 +89,9 @@ const QuotationUI = {
                     </div>
                     <div class="quot-row-actions">
                         ${q.pdfUrl ? `<button class="quot-btn-view" data-url="${q.pdfUrl}" title="Ver PDF">PDF</button>` : ''}
-                        <button class="quot-btn-load" data-id="${q.id}">Cargar</button>
-                        <button class="quot-btn-template" data-id="${q.id}">Usar como base</button>
+                        <button class="quot-btn-load" data-id="${q.id}" title="Cargar la cotización tal cual">Cargar</button>
+                        <button class="quot-btn-duplicate" data-id="${q.id}" title="Duplicar (misma info, número nuevo al exportar)">Duplicar</button>
+                        <button class="quot-btn-template" data-id="${q.id}" title="Cargar sin datos de cliente">Usar como base</button>
                         <button class="quot-btn-delete" data-id="${q.id}" data-name="${displayName}" title="Eliminar">✕</button>
                     </div>
                 </div>
@@ -101,6 +102,9 @@ const QuotationUI = {
 
         body.querySelectorAll('.quot-btn-load').forEach(btn => {
             btn.addEventListener('click', () => this.loadQuotation(btn.dataset.id));
+        });
+        body.querySelectorAll('.quot-btn-duplicate').forEach(btn => {
+            btn.addEventListener('click', () => this.duplicateQuotation(btn.dataset.id));
         });
         body.querySelectorAll('.quot-btn-template').forEach(btn => {
             btn.addEventListener('click', () => this.loadAsTemplate(btn.dataset.id));
@@ -170,6 +174,41 @@ const QuotationUI = {
         } catch (e) {
             console.error('❌ Error cargando cotización:', e);
             if (typeof Toast !== 'undefined') Toast.error('No se pudo cargar la cotización');
+        }
+    },
+
+    // Duplica una cotización: carga todo (incluso cliente) pero renombra el proyecto con " (copia)"
+    // para distinguir la variante. Al exportar, se asigna un número nuevo automáticamente.
+    async duplicateQuotation(id) {
+        try {
+            const q = await QuotationStorage.getQuotationById(id);
+            if (!q) return;
+            const stateObj = q.fullState || q;
+            this._restoreState(stateObj, false);
+
+            // Marcar el proyecto con sufijo para que se distinga de la original
+            const originalProject = stateObj.params?.project?.name || '';
+            const newProject = originalProject ? `${originalProject} (copia)` : '(copia)';
+            State.generalParams.proyecto = newProject;
+            if (State.generalParams.proyectoData) {
+                State.generalParams.proyectoData.name = newProject;
+                State.generalParams.proyectoData.id = null; // nuevo registro en DB si se guarda
+            } else {
+                State.generalParams.proyectoData = { id: null, name: newProject };
+            }
+            const proyectoInput = document.getElementById('input-proyecto');
+            if (proyectoInput) proyectoInput.value = newProject;
+
+            // Trigger re-render para reflejar el nuevo project name
+            if (typeof Render !== 'undefined') Render.updateAll();
+
+            this.closeModal();
+            if (typeof Toast !== 'undefined') {
+                Toast.success('Cotización duplicada — al exportar se asigna número nuevo', 3500);
+            }
+        } catch (e) {
+            console.error('❌ Error duplicando cotización:', e);
+            if (typeof Toast !== 'undefined') Toast.error('No se pudo duplicar la cotización');
         }
     },
 
