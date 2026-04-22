@@ -275,6 +275,26 @@ const State = {
         Render.updateAll();
     },
 
+    duplicateSpace(spaceId) {
+        const src = this.generalParams.spaces.find(s => s.id === spaceId);
+        if (!src) return null;
+        this._spaceCounter++;
+        const copy = {
+            id: `space_${this._spaceCounter}`,
+            name: `${src.name} (copia)`,
+            surface: src.surface,
+            items: JSON.parse(JSON.stringify(src.items || {}))
+        };
+        // Insertar inmediatamente después del original
+        const idx = this.generalParams.spaces.findIndex(s => s.id === spaceId);
+        this.generalParams.spaces.splice(idx + 1, 0, copy);
+        this.generalParams.activeSpaceId = copy.id;
+        Render.renderSpacesTabs();
+        Render.renderItems();
+        Render.updateAll();
+        return copy;
+    },
+
     getActiveSpace() {
         return this.generalParams.spaces.find(s => s.id === this.generalParams.activeSpaceId) || null;
     },
@@ -571,7 +591,7 @@ const Render = {
         const spaces = State.generalParams.spaces;
         const activeId = State.generalParams.activeSpaceId;
 
-        // Tabs
+        // Tabs (event delegation en tabsContainer más abajo)
         let tabsHTML = '';
         spaces.forEach(space => {
             const isActive = space.id === activeId;
@@ -580,37 +600,59 @@ const Render = {
                 <button class="space-tab ${isActive ? 'active' : ''}" data-space-id="${space.id}">
                     <span class="space-tab-name">${space.name}</span>
                     ${itemCount > 0 ? `<span class="space-tab-count">${itemCount}</span>` : ''}
-                    ${spaces.length > 1 ? `<span class="space-tab-remove" data-remove-id="${space.id}" title="Eliminar">&times;</span>` : ''}
+                    ${spaces.length > 1 ? `<span class="space-tab-remove" data-remove-id="${space.id}" title="Eliminar espacio">&times;</span>` : ''}
                 </button>
             `;
         });
+        // Botón "+" al final para agregar espacio rápido
+        tabsHTML += `<button class="space-tab-add" id="btn-space-add-inline" title="Agregar espacio">+</button>`;
         tabsContainer.innerHTML = tabsHTML;
 
-        // Event listeners para tabs
-        tabsContainer.querySelectorAll('.space-tab').forEach(tab => {
-            tab.addEventListener('click', (e) => {
-                if (e.target.classList.contains('space-tab-remove')) return;
-                State.setActiveSpace(tab.dataset.spaceId);
-            });
-        });
-        tabsContainer.querySelectorAll('.space-tab-remove').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                if (confirm('¿Eliminar este espacio y todos sus items?')) {
-                    State.removeSpace(btn.dataset.removeId);
+        // Delegación: un solo listener en el contenedor
+        if (!tabsContainer._delegated) {
+            tabsContainer.addEventListener('click', async (e) => {
+                const addBtn = e.target.closest('.space-tab-add');
+                if (addBtn) {
+                    State.addSpace();
+                    return;
+                }
+                const removeBtn = e.target.closest('.space-tab-remove');
+                if (removeBtn) {
+                    e.stopPropagation();
+                    const id = removeBtn.dataset.removeId;
+                    const space = State.generalParams.spaces.find(s => s.id === id);
+                    const itemCount = space ? Object.keys(space.items).length : 0;
+                    const msg = itemCount > 0
+                        ? `¿Eliminar "${space.name}" y sus ${itemCount} item${itemCount === 1 ? '' : 's'}? No se puede deshacer.`
+                        : `¿Eliminar "${space?.name || 'este espacio'}"?`;
+                    const ok = await Confirm.show({
+                        title: 'Eliminar espacio',
+                        message: msg,
+                        confirmText: 'Eliminar',
+                        cancelText: 'Cancelar',
+                        danger: true
+                    });
+                    if (ok) State.removeSpace(id);
+                    return;
+                }
+                const tab = e.target.closest('.space-tab');
+                if (tab) {
+                    State.setActiveSpace(tab.dataset.spaceId);
                 }
             });
-        });
+            tabsContainer._delegated = true;
+        }
 
         // Info del espacio activo
         if (infoContainer) {
             const activeSpace = State.getActiveSpace();
             if (activeSpace) {
+                const itemCount = Object.keys(activeSpace.items).length;
                 infoContainer.innerHTML = `
                     <div class="active-space-controls">
                         <div class="input-group input-group-compact">
                             <label>Nombre</label>
-                            <input type="text" class="text-input space-name-input" value="${activeSpace.name}" maxlength="40">
+                            <input type="text" class="text-input space-name-input" value="${activeSpace.name}" maxlength="40" placeholder="Nombre del espacio">
                         </div>
                         <div class="input-group input-group-compact">
                             <label>Superficie</label>
@@ -619,19 +661,28 @@ const Render = {
                                 <span class="input-suffix">m²</span>
                             </div>
                         </div>
+                        <div class="space-actions">
+                            <button type="button" class="btn-space-duplicate" title="Duplicar este espacio con sus items">⧉ Duplicar</button>
+                            ${itemCount > 0 ? `<span class="space-items-count">${itemCount} item${itemCount === 1 ? '' : 's'}</span>` : ''}
+                        </div>
                     </div>
                 `;
                 // Listeners
                 const nameInput = infoContainer.querySelector('.space-name-input');
                 nameInput?.addEventListener('input', (e) => {
                     activeSpace.name = e.target.value;
-                    // Actualizar solo el tab label
                     const tabBtn = tabsContainer.querySelector(`.space-tab[data-space-id="${activeSpace.id}"] .space-tab-name`);
                     if (tabBtn) tabBtn.textContent = e.target.value;
                 });
                 const surfaceInput = infoContainer.querySelector('.space-surface-input');
                 surfaceInput?.addEventListener('input', (e) => {
                     activeSpace.surface = e.target.value;
+                });
+                infoContainer.querySelector('.btn-space-duplicate')?.addEventListener('click', () => {
+                    const copy = State.duplicateSpace(activeSpace.id);
+                    if (copy && typeof Toast !== 'undefined') {
+                        Toast.success(`Espacio duplicado: "${copy.name}"`);
+                    }
                 });
             } else {
                 infoContainer.innerHTML = '<p class="empty-state">Sin espacios</p>';
