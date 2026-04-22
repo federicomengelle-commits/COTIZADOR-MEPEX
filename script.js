@@ -199,6 +199,178 @@ const Favorites = {
 };
 
 // =============================================
+// AUTOSAVE — guarda el State en localStorage cada X ms
+// =============================================
+// Persiste el borrador actual (cliente, params, items, spaces) en cada cambio
+// relevante. Al reload, si hay un draft con contenido, ofrece restaurarlo.
+// Se limpia al hacer reset. Tolerante a errores de localStorage (quota, privado).
+const Autosave = {
+    _key: 'mepex_draft',
+    _version: 1,
+    _debounceMs: 500,
+    _timer: null,
+    _suspended: false,
+
+    // Programa un guardado con debounce. Llamar desde cualquier mutation de State.
+    schedule() {
+        if (this._suspended) return;
+        clearTimeout(this._timer);
+        this._timer = setTimeout(() => this._save(), this._debounceMs);
+    },
+
+    _save() {
+        try {
+            const payload = {
+                v: this._version,
+                savedAt: Date.now(),
+                selectedItems: State.selectedItems,
+                generalParams: State.generalParams,
+                spaceCounter: State._spaceCounter
+            };
+            localStorage.setItem(this._key, JSON.stringify(payload));
+        } catch (e) {
+            // quota full, modo privado, etc — fallar silencioso
+            console.warn('Autosave: no se pudo guardar', e.message);
+        }
+    },
+
+    // Forzar guardado sincrónico (ej: desde Ctrl+S). Cancela debounce.
+    flush() {
+        clearTimeout(this._timer);
+        this._save();
+    },
+
+    load() {
+        try {
+            const raw = localStorage.getItem(this._key);
+            if (!raw) return null;
+            const parsed = JSON.parse(raw);
+            if (!parsed || parsed.v !== this._version) return null;
+            return parsed;
+        } catch {
+            return null;
+        }
+    },
+
+    clear() {
+        clearTimeout(this._timer);
+        try { localStorage.removeItem(this._key); } catch { /* silent */ }
+    },
+
+    // Heurística: ¿el borrador tiene contenido que vale la pena restaurar?
+    hasMeaningfulContent(draft) {
+        if (!draft) return false;
+        const items = draft.selectedItems || {};
+        if (Object.keys(items).some(k => (items[k]?.quantity || 0) > 0)) return true;
+        const p = draft.generalParams || {};
+        if ((p.cliente || '').trim()) return true;
+        if ((p.proyecto || '').trim()) return true;
+        if ((p.evento || '').trim()) return true;
+        if ((p.spaces || []).some(s =>
+            Object.values(s.items || {}).some(d => (d.quantity || 0) > 0)
+        )) return true;
+        return false;
+    },
+
+    // Formato "hace X" humano
+    _ago(ts) {
+        if (!ts) return '';
+        const sec = Math.max(1, Math.floor((Date.now() - ts) / 1000));
+        if (sec < 60) return 'hace un instante';
+        const min = Math.floor(sec / 60);
+        if (min < 60) return `hace ${min} min`;
+        const hr = Math.floor(min / 60);
+        if (hr < 24) return `hace ${hr} h`;
+        const days = Math.floor(hr / 24);
+        return `hace ${days} d`;
+    },
+
+    // Aplica un draft al State y re-renderiza toda la UI
+    apply(draft) {
+        if (!draft) return false;
+        this._suspended = true; // evitar autosave en cadena mientras aplicamos
+        try {
+            const p = draft.generalParams || {};
+            // Merge sobre los defaults para no perder props nuevas si cambió el schema
+            State.selectedItems = draft.selectedItems || {};
+            State.generalParams = { ...State.generalParams, ...p };
+            // Restaurar counter de espacios — si no está, derivarlo
+            if (typeof draft.spaceCounter === 'number') {
+                State._spaceCounter = draft.spaceCounter;
+            } else if (Array.isArray(p.spaces)) {
+                State._spaceCounter = p.spaces.reduce((m, s) => {
+                    const n = parseInt((s.id || '').replace(/\D/g, ''), 10);
+                    return Number.isFinite(n) && n > m ? n : m;
+                }, 0);
+            }
+
+            // Re-renderizar UI completa
+            if (typeof Render.resetGeneralParamsUI === 'function') Render.resetGeneralParamsUI();
+            if (typeof Render.updateLayoutForType === 'function') {
+                Render.updateLayoutForType(State.generalParams.quotationType);
+            }
+            if (typeof Render.renderSpacesTabs === 'function') Render.renderSpacesTabs();
+            if (typeof Render.renderItems === 'function') Render.renderItems();
+            if (typeof Render.updateAll === 'function') Render.updateAll();
+            return true;
+        } catch (e) {
+            console.error('Autosave: error aplicando draft', e);
+            return false;
+        } finally {
+            this._suspended = false;
+        }
+    },
+
+    // Llamar al arrancar la app. Si hay draft con contenido, muestra banner.
+    maybePromptRecovery() {
+        const draft = this.load();
+        if (!this.hasMeaningfulContent(draft)) {
+            if (draft) this.clear(); // draft vacío: limpiar
+            return;
+        }
+        this._showBanner(draft);
+    },
+
+    _showBanner(draft) {
+        // Si ya hay uno, no duplicar
+        if (document.querySelector('.draft-recovery-banner')) return;
+
+        const banner = document.createElement('div');
+        banner.className = 'draft-recovery-banner';
+        banner.setAttribute('role', 'status');
+        banner.innerHTML = `
+            <div class="draft-recovery-icon">📝</div>
+            <div class="draft-recovery-text">
+                <div class="draft-recovery-title">Tenés un borrador sin guardar</div>
+                <div class="draft-recovery-meta">Último cambio ${this._ago(draft.savedAt)}</div>
+            </div>
+            <div class="draft-recovery-actions">
+                <button type="button" class="btn-draft-restore">Restaurar</button>
+                <button type="button" class="btn-draft-discard">Descartar</button>
+            </div>
+        `;
+
+        const main = document.querySelector('.col-main');
+        if (!main) return;
+        // Insertar al inicio del main (antes del header)
+        main.insertBefore(banner, main.firstChild);
+
+        banner.querySelector('.btn-draft-restore').addEventListener('click', () => {
+            const ok = this.apply(draft);
+            banner.remove();
+            if (ok && typeof Toast !== 'undefined') {
+                Toast.success('Borrador restaurado');
+            }
+        });
+        banner.querySelector('.btn-draft-discard').addEventListener('click', () => {
+            this.clear();
+            banner.remove();
+            if (typeof Toast !== 'undefined') Toast.info('Borrador descartado', 1500);
+        });
+    }
+};
+
+// =============================================
 // STATE MANAGEMENT
 // =============================================
 const State = {
@@ -387,6 +559,9 @@ const State = {
     },
 
     reset() {
+        // Borrar borrador al reiniciar (arrancás de cero — no queremos recovery fantasma)
+        if (typeof Autosave !== 'undefined') Autosave.clear();
+
         this.selectedItems = {};
         this.activeMultipliers.clear();
         this._spaceCounter = 0;
@@ -462,6 +637,91 @@ const Render = {
                 e.target.classList.remove('input-error');
             }
         });
+
+        // Controles responsive (drawers en <1024px)
+        this._initMobileControls();
+    },
+
+    // Drawers mobile: hamburguesa (nav) + FAB (summary)
+    // En desktop (≥1024px) CSS oculta los botones, así que estos listeners
+    // quedan dormidos pero son idempotentes ante resize.
+    _initMobileControls() {
+        if (this._mobileControlsBound) return;
+        this._mobileControlsBound = true;
+
+        const container = document.querySelector('.app-container');
+        const overlay = document.getElementById('mobile-overlay');
+        const navBtn = document.getElementById('btn-nav-toggle');
+        const sumBtn = document.getElementById('btn-summary-toggle');
+        if (!container || !overlay) return;
+
+        const closeAll = () => {
+            container.classList.remove('nav-open', 'summary-open');
+            overlay.classList.remove('is-visible');
+            navBtn?.setAttribute('aria-expanded', 'false');
+            document.body.classList.remove('drawer-locked');
+        };
+
+        const openNav = () => {
+            container.classList.add('nav-open');
+            container.classList.remove('summary-open');
+            overlay.classList.add('is-visible');
+            navBtn?.setAttribute('aria-expanded', 'true');
+            document.body.classList.add('drawer-locked');
+        };
+
+        const openSummary = () => {
+            container.classList.add('summary-open');
+            container.classList.remove('nav-open');
+            overlay.classList.add('is-visible');
+            navBtn?.setAttribute('aria-expanded', 'false');
+            document.body.classList.add('drawer-locked');
+        };
+
+        navBtn?.addEventListener('click', () => {
+            container.classList.contains('nav-open') ? closeAll() : openNav();
+        });
+        sumBtn?.addEventListener('click', () => {
+            container.classList.contains('summary-open') ? closeAll() : openSummary();
+        });
+
+        // Tap en overlay cierra
+        overlay.addEventListener('click', closeAll);
+
+        // Tap en un link del nav cierra el drawer (sólo si está abierto por mobile)
+        document.getElementById('category-nav')?.addEventListener('click', (e) => {
+            const link = e.target.closest('a, .nav-link, [data-nav-link]');
+            if (link && container.classList.contains('nav-open')) closeAll();
+        });
+
+        // Esc cierra cualquier drawer
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' &&
+                (container.classList.contains('nav-open') ||
+                 container.classList.contains('summary-open'))) {
+                closeAll();
+            }
+        });
+
+        // Si la ventana crece a desktop, cerrar cualquier drawer abierto
+        let lastIsMobile = window.matchMedia('(max-width: 1023px)').matches;
+        window.addEventListener('resize', () => {
+            const isMobile = window.matchMedia('(max-width: 1023px)').matches;
+            if (lastIsMobile && !isMobile) closeAll();
+            lastIsMobile = isMobile;
+        });
+
+        // Sincronizar el total del FAB con el total real en cada update
+        // Hook simple: observamos el nodo #total-display via MutationObserver
+        const totalEl = document.getElementById('total-display');
+        const fabTotal = document.getElementById('fab-total');
+        if (totalEl && fabTotal) {
+            fabTotal.textContent = totalEl.textContent;
+            const obs = new MutationObserver(() => {
+                fabTotal.textContent = totalEl.textContent;
+            });
+            obs.observe(totalEl, { childList: true, characterData: true, subtree: true });
+        }
     },
 
     // Maneja el cambio de tipo de cotización preservando items cuando sea posible
@@ -1132,6 +1392,9 @@ const Render = {
 
         this.updateNavBadges();
         this.updateSummary();
+
+        // Autosave con debounce — toda mutation de State termina acá
+        if (typeof Autosave !== 'undefined') Autosave.schedule();
     },
 
     // Actualiza los badges de contador en el nav por categoría
@@ -1201,6 +1464,11 @@ const Render = {
 
         this._initGlobalShortcuts(input);
 
+        // Botón de ayuda de atajos (?)
+        document.getElementById('btn-shortcuts-help')?.addEventListener('click', () => {
+            this._toggleShortcutsCheatsheet();
+        });
+
         if (clearBtn) {
             clearBtn.addEventListener('click', () => {
                 input.value = '';
@@ -1211,8 +1479,10 @@ const Render = {
         }
     },
 
-    // Atajos de teclado globales: Ctrl/Cmd+K y "/" enfocan el search.
-    // Esc (en cualquier parte) blurea el elemento activo.
+    // Atajos de teclado globales
+    // Navegación:  Ctrl/Cmd+K y "/" → focus search · Esc → close/blur
+    // Acciones:    Ctrl+S → guardar borrador · Ctrl+P → exportar PDF
+    //              Ctrl+N → reiniciar · ? → cheatsheet de atajos
     _initGlobalShortcuts(searchInput) {
         if (this._shortcutsBound) return;
         this._shortcutsBound = true;
@@ -1223,27 +1493,71 @@ const Render = {
             return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable;
         };
 
+        const focusSearch = () => {
+            searchInput.focus();
+            searchInput.select();
+            searchInput.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        };
+
         document.addEventListener('keydown', (e) => {
-            // Ctrl+K / Cmd+K: focus al search desde cualquier lado
-            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+            const ctrl = e.ctrlKey || e.metaKey;
+            const key = e.key.toLowerCase();
+
+            // Ctrl/Cmd+K: focus al search
+            if (ctrl && key === 'k') {
                 e.preventDefault();
-                searchInput.focus();
-                searchInput.select();
-                searchInput.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                focusSearch();
+                return;
+            }
+
+            // Ctrl/Cmd+S: forzar guardado del borrador
+            if (ctrl && key === 's') {
+                e.preventDefault();
+                if (typeof Autosave !== 'undefined') {
+                    Autosave.flush();
+                    if (typeof Toast !== 'undefined') Toast.success('Borrador guardado', 1400);
+                }
+                return;
+            }
+
+            // Ctrl/Cmd+P: exportar PDF
+            if (ctrl && key === 'p') {
+                e.preventDefault();
+                const btn = document.getElementById('btn-export');
+                if (btn && !btn.disabled) btn.click();
+                return;
+            }
+
+            // Ctrl/Cmd+N: reiniciar cotización (nueva)
+            if (ctrl && key === 'n') {
+                e.preventDefault();
+                const btn = document.getElementById('btn-reset');
+                if (btn) btn.click();
                 return;
             }
 
             // "/" solo dispara si no estamos ya tipeando en otro campo
             if (e.key === '/' && !isTypingTarget(e.target)) {
                 e.preventDefault();
-                searchInput.focus();
-                searchInput.select();
-                searchInput.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                focusSearch();
                 return;
             }
 
-            // Esc global: si hay un modal abierto lo cierra; sino saca focus del elemento activo
+            // "?" (Shift+/): cheatsheet de atajos — solo fuera de inputs
+            if (e.key === '?' && !isTypingTarget(e.target)) {
+                e.preventDefault();
+                this._toggleShortcutsCheatsheet();
+                return;
+            }
+
+            // Esc global: modales primero, después blur
             if (e.key === 'Escape') {
+                // Cheatsheet tiene prioridad
+                const cheat = document.querySelector('.shortcuts-cheatsheet-overlay');
+                if (cheat) {
+                    this._closeShortcutsCheatsheet();
+                    return;
+                }
                 const confirmOverlay = document.querySelector('.confirm-overlay');
                 if (confirmOverlay) return; // Confirm maneja su propio Esc
                 const quotModal = document.getElementById('quotation-modal');
@@ -1256,6 +1570,62 @@ const Render = {
                 }
             }
         });
+    },
+
+    // Modal con tabla de atajos (?)
+    _toggleShortcutsCheatsheet() {
+        if (document.querySelector('.shortcuts-cheatsheet-overlay')) {
+            this._closeShortcutsCheatsheet();
+            return;
+        }
+
+        const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/i.test(navigator.platform || '');
+        const mod = isMac ? '⌘' : 'Ctrl';
+
+        const overlay = document.createElement('div');
+        overlay.className = 'shortcuts-cheatsheet-overlay';
+        overlay.innerHTML = `
+            <div class="shortcuts-cheatsheet" role="dialog" aria-label="Atajos de teclado">
+                <div class="shortcuts-cheatsheet-header">
+                    <h3>Atajos de teclado</h3>
+                    <button type="button" class="shortcuts-cheatsheet-close" aria-label="Cerrar">✕</button>
+                </div>
+                <div class="shortcuts-cheatsheet-body">
+                    <div class="shortcuts-section">
+                        <h4>Navegación</h4>
+                        <dl class="shortcuts-list">
+                            <dt><kbd>${mod}</kbd> + <kbd>K</kbd></dt><dd>Buscar items</dd>
+                            <dt><kbd>/</kbd></dt><dd>Buscar items (alternativa)</dd>
+                            <dt><kbd>Esc</kbd></dt><dd>Cerrar modal / limpiar búsqueda</dd>
+                        </dl>
+                    </div>
+                    <div class="shortcuts-section">
+                        <h4>Acciones</h4>
+                        <dl class="shortcuts-list">
+                            <dt><kbd>${mod}</kbd> + <kbd>S</kbd></dt><dd>Guardar borrador</dd>
+                            <dt><kbd>${mod}</kbd> + <kbd>P</kbd></dt><dd>Exportar PDF</dd>
+                            <dt><kbd>${mod}</kbd> + <kbd>N</kbd></dt><dd>Nueva cotización (reiniciar)</dd>
+                            <dt><kbd>?</kbd></dt><dd>Mostrar / ocultar esta ayuda</dd>
+                        </dl>
+                    </div>
+                </div>
+                <div class="shortcuts-cheatsheet-footer">
+                    <small>Los atajos con <kbd>${mod}</kbd> funcionan desde cualquier lado de la app.</small>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(overlay);
+
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) this._closeShortcutsCheatsheet();
+        });
+        overlay.querySelector('.shortcuts-cheatsheet-close')
+            .addEventListener('click', () => this._closeShortcutsCheatsheet());
+    },
+
+    _closeShortcutsCheatsheet() {
+        const overlay = document.querySelector('.shortcuts-cheatsheet-overlay');
+        if (overlay) overlay.remove();
     },
 
     // Normaliza un texto para búsqueda: lowercase + sin acentos + sin espacios extra
@@ -1365,18 +1735,32 @@ const Render = {
 
         let subBase = 0;
         let subConAltura = 0;
+        // Desglose por categoría: { [catId]: { conAltura, final } }
+        const byCategory = {};
         getAllItemsFlat().forEach(({ item, quantity }) => {
             const price = this._parsePrice(item.price);
             const lineBase = price * quantity;
             subBase += lineBase;
             const heightMult = heightAffectedCategories.includes(item.category)
                 ? params.heightMultiplier : 1;
-            subConAltura += lineBase * heightMult;
+            const lineConAltura = lineBase * heightMult;
+            subConAltura += lineConAltura;
+
+            if (!byCategory[item.category]) {
+                byCategory[item.category] = { conAltura: 0, final: 0 };
+            }
+            byCategory[item.category].conAltura += lineConAltura;
         });
         const subConModifier = subConAltura * modifierMultiplier;
         const subConFee = params.includeFee
             ? subConModifier * (1 + params.feePercentage)
             : subConModifier;
+
+        // Propagar modifier + fee a cada categoría para calcular el "final"
+        const catMultiplier = modifierMultiplier * (params.includeFee ? (1 + params.feePercentage) : 1);
+        Object.keys(byCategory).forEach(catId => {
+            byCategory[catId].final = byCategory[catId].conAltura * catMultiplier;
+        });
 
         const aporteAltura = subConAltura - subBase;
         const aporteModifier = subConModifier - subConAltura;
@@ -1571,7 +1955,61 @@ const Render = {
                 </div>`;
         }
 
+        // ──────────────────────────────
+        // Desglose por rubro (expandible)
+        // Solo mostramos si hay al menos 1 item cargado
+        // ──────────────────────────────
+        const catEntries = Object.entries(byCategory)
+            .filter(([_, v]) => v.final > 0)
+            .sort((a, b) => b[1].final - a[1].final);
+
+        if (catEntries.length > 0 && subConFee > 0) {
+            // Preservar estado abierto/cerrado entre renders del resumen
+            const breakdownOpen = localStorage.getItem('mepex_breakdown_open') === '1';
+            summaryHTML += `
+                <details class="summary-breakdown" ${breakdownOpen ? 'open' : ''}>
+                    <summary class="summary-breakdown-toggle">
+                        <span class="breakdown-label">Desglose por rubro</span>
+                        <span class="breakdown-chevron" aria-hidden="true">▾</span>
+                    </summary>
+                    <div class="summary-breakdown-body">
+            `;
+
+            catEntries.forEach(([catId, data]) => {
+                const cat = DB.getCategories().find(c => c.id === catId);
+                if (!cat) return;
+                const pct = subConFee > 0 ? (data.final / subConFee) * 100 : 0;
+                const isHeightAffected = heightAffectedCategories.includes(catId);
+                summaryHTML += `
+                    <div class="breakdown-row${isHeightAffected && params.heightMultiplier > 1 ? ' breakdown-row-altura' : ''}">
+                        <div class="breakdown-row-head">
+                            <span class="breakdown-cat-name">${cat.icon} ${cat.name}</span>
+                            <span class="breakdown-amount">${this._fmt(data.final)}</span>
+                        </div>
+                        <div class="breakdown-row-bar">
+                            <div class="breakdown-bar-fill" style="width: ${pct.toFixed(1)}%"></div>
+                            <span class="breakdown-pct">${pct.toFixed(1)}%</span>
+                        </div>
+                    </div>
+                `;
+            });
+
+            summaryHTML += `
+                    </div>
+                </details>
+            `;
+        }
+
         summaryList.innerHTML = summaryHTML;
+
+        // Persistir estado del desglose al toggle
+        const breakdownEl = summaryList.querySelector('.summary-breakdown');
+        if (breakdownEl) {
+            breakdownEl.addEventListener('toggle', () => {
+                try { localStorage.setItem('mepex_breakdown_open', breakdownEl.open ? '1' : '0'); }
+                catch { /* silent */ }
+            });
+        }
 
         const subtotalFinal = subConFee;
         const tax = subtotalFinal * 0.21;
@@ -2613,6 +3051,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     Render.initSearchFilter();
+
+    // Detectar borrador sin guardar y ofrecer restaurar
+    if (typeof Autosave !== 'undefined') Autosave.maybePromptRecovery();
 
     console.log('MEPEX Cotizador initialized successfully.');
 

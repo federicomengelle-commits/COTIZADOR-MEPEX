@@ -35,6 +35,9 @@
         <main class="col-main">
             <header class="main-header">
                 <div class="header-top">
+                    <button type="button" id="btn-nav-toggle" class="btn-mobile-toggle" aria-label="Abrir menú" aria-expanded="false">
+                        <span class="hamburger-lines"><span></span><span></span><span></span></span>
+                    </button>
                     <div class="header-right">
                         <div id="sync-status" class="sync-status sync-offline" title="Estado de conexión">
                             <span class="sync-dot"></span>
@@ -324,6 +327,9 @@
                     <span class="items-search-kbd" title="Atajo: Ctrl+K o /">Ctrl+K</span>
                     <button class="items-search-clear" id="items-search-clear" title="Limpiar búsqueda (Esc)" style="display:none">✕</button>
                 </div>
+                <button type="button" id="btn-shortcuts-help" class="btn-shortcuts-help" title="Ver atajos de teclado (?)">
+                    <span>?</span>
+                </button>
             </div>
 
             <div id="items-container" class="items-grid">
@@ -371,6 +377,18 @@
                 </div>
             </div>
         </aside>
+
+        <!-- MOBILE OVERLAY (solo aparece cuando hay drawer abierto en <1024px) -->
+        <div id="mobile-overlay" class="mobile-overlay" aria-hidden="true"></div>
+
+        <!-- MOBILE FAB: muestra el total y abre el resumen -->
+        <button type="button" id="btn-summary-toggle" class="btn-summary-fab" aria-label="Ver resumen de cotización">
+            <span class="fab-icon">📊</span>
+            <span class="fab-text">
+                <span class="fab-label">Ver resumen</span>
+                <span class="fab-total" id="fab-total">$0</span>
+            </span>
+        </button>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
