@@ -371,35 +371,7 @@ const Render = {
 
         // Quotation type selector (en params section)
         document.querySelectorAll('.quot-btn-param').forEach(btn => {
-            btn.addEventListener('click', () => {
-                document.querySelectorAll('.quot-btn-param').forEach(b => b.classList.remove('active'));
-                btn.classList.add('active');
-                const newType = btn.dataset.type;
-                const oldType = State.generalParams.quotationType;
-
-                // Si cambiamos de Stand a multi-espacio, migrar items
-                if (oldType === 'stand' && (newType === 'expo' || newType === 'alquiler')) {
-                    const hasItems = Object.keys(State.selectedItems).length > 0;
-                    if (State.generalParams.spaces.length === 0) {
-                        const space = State.addSpace('Espacio 1');
-                        if (hasItems) {
-                            space.items = { ...State.selectedItems };
-                        }
-                    }
-                }
-                // Si cambiamos de multi-espacio a Stand, migrar items del espacio activo
-                if ((oldType === 'expo' || oldType === 'alquiler') && newType === 'stand') {
-                    const activeSpace = State.getActiveSpace();
-                    if (activeSpace && Object.keys(activeSpace.items).length > 0) {
-                        State.selectedItems = { ...activeSpace.items };
-                    }
-                }
-
-                State.generalParams.quotationType = newType;
-                this.updateLayoutForType(newType);
-                Render.renderItems();
-                Render.updateAll();
-            });
+            btn.addEventListener('click', () => this.handleQuotationTypeSwitch(btn));
         });
 
         // Botón agregar espacio
@@ -416,6 +388,108 @@ const Render = {
                 e.target.classList.remove('input-error');
             }
         });
+    },
+
+    // Maneja el cambio de tipo de cotización preservando items cuando sea posible
+    async handleQuotationTypeSwitch(btn) {
+        const newType = btn.dataset.type;
+        const oldType = State.generalParams.quotationType;
+        if (newType === oldType) return;
+
+        const fromStand = oldType === 'stand';
+        const toStand = newType === 'stand';
+        const fromMulti = oldType === 'expo' || oldType === 'alquiler';
+        const toMulti = newType === 'expo' || newType === 'alquiler';
+
+        // Caso 1: Stand → multi-espacio
+        if (fromStand && toMulti) {
+            const standItemCount = Object.values(State.selectedItems).filter(d => d.quantity > 0).length;
+            const existingSpaces = State.generalParams.spaces || [];
+            const hasExistingSpaceItems = existingSpaces.some(s =>
+                Object.values(s.items || {}).some(d => d.quantity > 0)
+            );
+
+            // Si hay items en Stand Y ya hay espacios con items → preguntar
+            if (standItemCount > 0 && hasExistingSpaceItems) {
+                const ok = await Confirm.show({
+                    title: 'Cambiar a modo multi-espacio',
+                    message: `Tenés ${standItemCount} items cargados en modo Stand. Se agregarán al primer espacio (combinándose con sus items actuales). ¿Continuar?`,
+                    confirmText: 'Sí, continuar',
+                    cancelText: 'Cancelar'
+                });
+                if (!ok) return;
+            }
+
+            // Asegurar que haya al menos un espacio
+            if (existingSpaces.length === 0) {
+                State.addSpace('Espacio 1');
+            }
+
+            // Volcar items del Stand al primer espacio (merging quantities)
+            if (standItemCount > 0) {
+                const targetSpace = State.generalParams.spaces[0];
+                Object.entries(State.selectedItems).forEach(([id, data]) => {
+                    if (data.quantity <= 0) return;
+                    if (targetSpace.items[id]) {
+                        targetSpace.items[id].quantity += data.quantity;
+                    } else {
+                        targetSpace.items[id] = { quantity: data.quantity, autoCalc: data.autoCalc };
+                    }
+                });
+                State.selectedItems = {}; // limpiar stand
+                State.generalParams.activeSpaceId = targetSpace.id;
+            }
+        }
+
+        // Caso 2: multi-espacio → Stand
+        if (fromMulti && toStand) {
+            const spaces = State.generalParams.spaces || [];
+            const totalSpaceItems = spaces.reduce((acc, s) =>
+                acc + Object.values(s.items || {}).filter(d => d.quantity > 0).length, 0);
+            const spacesWithItems = spaces.filter(s =>
+                Object.values(s.items || {}).some(d => d.quantity > 0)).length;
+            const standItemCount = Object.values(State.selectedItems).filter(d => d.quantity > 0).length;
+
+            // Advertir si hay múltiples espacios con items (se unifican) o si Stand ya tenía items
+            if (spacesWithItems > 1 || (totalSpaceItems > 0 && standItemCount > 0)) {
+                const msg = spacesWithItems > 1
+                    ? `Todos los items de los ${spacesWithItems} espacios se unificarán en una única lista Stand (sumando cantidades). ¿Continuar?`
+                    : `Se combinarán los items del espacio con los que ya tenías en Stand. ¿Continuar?`;
+                const ok = await Confirm.show({
+                    title: 'Cambiar a modo Stand',
+                    message: msg,
+                    confirmText: 'Sí, unificar',
+                    cancelText: 'Cancelar'
+                });
+                if (!ok) return;
+            }
+
+            // Merge de todos los espacios a State.selectedItems
+            spaces.forEach(space => {
+                Object.entries(space.items || {}).forEach(([id, data]) => {
+                    if (data.quantity <= 0) return;
+                    if (State.selectedItems[id]) {
+                        State.selectedItems[id].quantity += data.quantity;
+                    } else {
+                        State.selectedItems[id] = { quantity: data.quantity, autoCalc: data.autoCalc };
+                    }
+                });
+            });
+            // Limpiar espacios
+            State.generalParams.spaces = [];
+            State.generalParams.activeSpaceId = null;
+            State._spaceCounter = 0;
+        }
+
+        // Caso 3: expo ↔ alquiler (ambos multi-espacio) → no migra nada, solo cambia el tipo
+
+        // Aplicar el cambio
+        document.querySelectorAll('.quot-btn-param').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        State.generalParams.quotationType = newType;
+        this.updateLayoutForType(newType);
+        Render.renderItems();
+        Render.updateAll();
     },
 
     // Toggle visibilidad de secciones según tipo
