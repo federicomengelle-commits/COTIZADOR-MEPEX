@@ -797,6 +797,12 @@ const Render = {
         card.className = 'item-card';
         card.dataset.itemId = item.id;
 
+        const catName = DATABASE.categories[item.category]?.name || '';
+        const subName = DATABASE.categories[item.category]?.subcategories?.[item.subcategory]?.name || '';
+        card.dataset.search = this._normalizeSearch(
+            `${item.name} ${item.description || ''} ${catName} ${subName} ${item.unit || ''}`
+        );
+
         const currentQty = State.getItemQuantity(item.id);
         const isSelected = currentQty > 0;
 
@@ -992,12 +998,27 @@ const Render = {
         }
     },
 
+    // Normaliza un texto para búsqueda: lowercase + sin acentos + sin espacios extra
+    _normalizeSearch(text) {
+        return (text || '')
+            .toString()
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+    },
+
     // Aplica el filtro de búsqueda visualmente (no modifica State)
+    // Matchea en nombre + descripción + categoría + subcategoría + unidad.
+    // Múltiples tokens (separados por espacios) se combinan con AND.
     applySearchFilter(query) {
         const container = document.getElementById('items-container');
         if (!container) return;
 
-        if (!query) {
+        const normalized = this._normalizeSearch(query);
+
+        if (!normalized) {
             container.classList.remove('searching');
             document.querySelectorAll('.item-card').forEach(c => c.classList.remove('item-search-hidden'));
             document.querySelectorAll('.category-section').forEach(s => s.style.display = '');
@@ -1005,11 +1026,12 @@ const Render = {
         }
 
         container.classList.add('searching');
-        const lowerQuery = query.toLowerCase();
+        const tokens = normalized.split(' ').filter(Boolean);
 
         document.querySelectorAll('.item-card').forEach(card => {
-            const name = card.querySelector('.item-name')?.textContent?.toLowerCase() || '';
-            card.classList.toggle('item-search-hidden', !name.includes(lowerQuery));
+            const haystack = card.dataset.search || '';
+            const matches = tokens.every(t => haystack.includes(t));
+            card.classList.toggle('item-search-hidden', !matches);
         });
 
         // Mostrar/ocultar secciones según si tienen items visibles
@@ -1017,6 +1039,7 @@ const Render = {
             const hasVisible = section.querySelectorAll('.item-card:not(.item-search-hidden)').length > 0;
             section.style.display = hasVisible ? '' : 'none';
         });
+
     },
 
     // Re-aplica el filtro activo después de un re-render de items
