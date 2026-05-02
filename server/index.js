@@ -84,7 +84,7 @@ function formatClient(row) {
     };
 }
 
-// proyectos_2026: id(uuid), nombre, cliente_id, cliente_nombre, n_lote, evento_id, evento_nombre, estado, tipo, responsable, empresa
+// proyectos: id(uuid), nombre, cliente_id, cliente_nombre, n_lote, evento_id, evento_nombre, estado, tipo, responsable, empresa
 function formatProject(row) {
     return {
         id: row.id,
@@ -101,7 +101,7 @@ function formatProject(row) {
     };
 }
 
-// eventos_2026: id(uuid), nombre, lugar, fecha_armado_inicio, fecha_armado_fin, fecha_evento_inicio, fecha_evento_fin, fecha_desarme, prioridad, estado
+// eventos: id(uuid), nombre, lugar, fecha_armado_inicio, fecha_armado_fin, fecha_evento_inicio, fecha_evento_fin, fecha_desarme, prioridad, estado
 function formatEvent(row) {
     return {
         id: row.id,
@@ -410,7 +410,7 @@ app.get('/api/clients/search', async (req, res) => {
 });
 
 // =============================================
-// ENDPOINTS: PROYECTOS (tabla: proyectos_2026)
+// ENDPOINTS: PROYECTOS (tabla: proyectos)
 // =============================================
 
 app.get('/api/projects', async (req, res) => {
@@ -418,7 +418,7 @@ app.get('/api/projects', async (req, res) => {
         console.log('📁 Fetching projects from Supabase...');
 
         const { data, error } = await supabase
-            .from('proyectos_2026')
+            .from('proyectos')
             .select('*')
             .order('created_at', { ascending: false });
 
@@ -450,7 +450,7 @@ app.get('/api/projects/search', async (req, res) => {
         }
 
         const { data, error } = await supabase
-            .from('proyectos_2026')
+            .from('proyectos')
             .select('*')
             .ilike('nombre', `%${q}%`)
             .limit(10);
@@ -471,7 +471,7 @@ app.get('/api/projects/:projectId', async (req, res) => {
         console.log(`📁 Fetching project: ${projectId}`);
 
         const { data: projectRow, error } = await supabase
-            .from('proyectos_2026')
+            .from('proyectos')
             .select('*')
             .eq('id', projectId)
             .single();
@@ -498,7 +498,7 @@ app.get('/api/projects/:projectId', async (req, res) => {
         if (project.eventId) {
             try {
                 const { data: eventRow } = await supabase
-                    .from('eventos_2026')
+                    .from('eventos')
                     .select('*')
                     .eq('id', project.eventId)
                     .single();
@@ -517,7 +517,7 @@ app.get('/api/projects/:projectId', async (req, res) => {
 });
 
 // =============================================
-// ENDPOINTS: EVENTOS (tabla: eventos_2026)
+// ENDPOINTS: EVENTOS (tabla: eventos)
 // =============================================
 
 app.get('/api/events', async (req, res) => {
@@ -525,7 +525,7 @@ app.get('/api/events', async (req, res) => {
         console.log('📅 Fetching events from Supabase...');
 
         const { data, error } = await supabase
-            .from('eventos_2026')
+            .from('eventos')
             .select('*')
             .order('fecha_evento_inicio', { ascending: true, nullsFirst: false });
 
@@ -557,7 +557,7 @@ app.get('/api/events/search', async (req, res) => {
         }
 
         const { data, error } = await supabase
-            .from('eventos_2026')
+            .from('eventos')
             .select('*')
             .ilike('nombre', `%${q}%`)
             .limit(10);
@@ -895,7 +895,7 @@ app.listen(PORT, () => {
     console.log('      POST /api/quotations          - Create quotation');
     console.log('      PUT  /api/quotations/:id      - Update quotation');
     console.log('      POST /api/quotations/:id/pdf  - Upload PDF');
-    console.log('   📦 Tables: catalogo_items, clientes, proyectos_2026, eventos_2026, cotizaciones');
+    console.log('   📦 Tables: catalogo_items, clientes, proyectos, eventos, cotizaciones');
     console.log('═══════════════════════════════════════════════');
     console.log('');
 });
