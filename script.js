@@ -2343,12 +2343,10 @@ const Render = {
 
         let subBase = 0;
         let subConAltura = 0;
-        let itemsConPrecioCero = 0;     // counter para banner de advertencia
         // Desglose por categoría: { [catId]: { conAltura, final } }
         const byCategory = {};
         getAllItemsFlat().forEach(({ item, quantity }) => {
             const price = this._parsePrice(item.price);
-            if (price <= 0) itemsConPrecioCero++;
             const lineBase = price * quantity;
             subBase += lineBase;
             const heightMult = heightAffectedCategories.includes(item.category)
@@ -2380,20 +2378,6 @@ const Render = {
         // Sección de parámetros con montos
         // ──────────────────────────────
         let summaryHTML = '';
-
-        // Banner de advertencia si hay items sin precio cargado en el catálogo.
-        // No bloquea exportación — solo avisa para que Fede revise.
-        if (itemsConPrecioCero > 0) {
-            summaryHTML += `
-                <div class="zero-price-warning" role="status">
-                    <span class="warn-icon">⚠</span>
-                    <div class="warn-text">
-                        <strong>${itemsConPrecioCero} item${itemsConPrecioCero === 1 ? '' : 's'} sin precio en el catálogo</strong>
-                        <small>El total puede no reflejar el monto real. Cargá los precios en LOBBY.</small>
-                    </div>
-                </div>
-            `;
-        }
 
         if (qType === 'stand') {
             summaryHTML += `
@@ -3520,29 +3504,32 @@ const Render = {
                     doc.line(margin, yPos + 2, pageWidth - margin, yPos + 2);
                     yPos += 7;
 
-                    // En Infraestructura damos una línea de contexto (superficie+altura)
-                    // antes de enumerar las piezas individuales.
+                    // Stand = proyecto integral. En el PDF no enumeramos precios
+                    // individuales: Infraestructura sale como línea OCTEXA y los demás
+                    // rubros listan piezas (qty - nombre) sin monto por ítem.
                     if (isInfrastructure) {
+                        doc.setFont('helvetica', 'normal');
+                        doc.setTextColor(...lightGray);
+                        doc.text(`Superficie: ${params.metraje}m² — Altura: ${heightLabel}`, margin + 5, yPos);
+                        yPos += 5;
                         doc.setFont('helvetica', 'italic');
                         doc.setTextColor(...mediumGray);
-                        doc.text(`Stand de ${params.metraje}m² — Altura: ${heightLabel}`, margin + 5, yPos);
+                        doc.text('Construcción modular con sistema OCTEXA', margin + 5, yPos);
                         yPos += 6;
+                    } else {
+                        doc.setFont('helvetica', 'normal');
+                        doc.setTextColor(...lightGray);
+                        groupedItems[cat.id].forEach(item => {
+                            if (yPos > pageHeight - 60) { addDarkPage(); yPos = 25; }
+                            doc.text(`${item.quantity} - ${item.name}`, margin + 5, yPos);
+                            yPos += 5;
+                        });
                     }
 
-                    // Enumerar items en TODAS las categorías (incluida Infraestructura).
-                    // Antes Stand omitía los items de Infraestructura y mostraba sólo
-                    // "Construcción modular con sistema OCTEXA" — quedaba poco transparente.
-                    doc.setFont('helvetica', 'normal');
+                    // catTotal se acumula igual en todos los rubros para que el
+                    // subtotal/grand total quede correcto, aunque no se imprima.
                     groupedItems[cat.id].forEach(item => {
-                        if (yPos > pageHeight - 60) { addDarkPage(); yPos = 25; }
-                        const itemTotal = item.price * item.quantity;
-                        catTotal += itemTotal;
-
-                        doc.setTextColor(...lightGray);
-                        doc.text(formatItemLine(item), margin + 5, yPos);
-                        doc.setTextColor(...white);
-                        doc.text(`$${Math.round(itemTotal).toLocaleString('es-AR')}`, pageWidth - margin, yPos, { align: 'right' });
-                        yPos += 5;
+                        catTotal += item.price * item.quantity;
                     });
 
                     subtotalLoaded += catTotal;
