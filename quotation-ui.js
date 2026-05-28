@@ -64,6 +64,20 @@ const QuotationUI = {
             return;
         }
 
+        // Formateador de moneda ARS reusado por todas las filas.
+        const fmtCurrency = (n) => {
+            const v = Number(n) || 0;
+            return `$${Math.round(v).toLocaleString('es-AR')}`;
+        };
+
+        // Labels para los estados conocidos. Si llega un estado nuevo, se muestra tal cual.
+        const STATUS_LABELS = {
+            borrador: 'Borrador',
+            aprobada: 'Aprobada',
+            rechazada: 'Rechazada',
+            enviada: 'Enviada'
+        };
+
         let listHTML = '';
         quotations.forEach(q => {
             const dateSource = q.savedAt || q.date || q.updatedAt || q.createdAt;
@@ -77,14 +91,27 @@ const QuotationUI = {
             const eventName = q.params?.event?.name || '—';
             const displayName = q.cotNumber || q.name || '—';
 
+            // Total: viene de la API como `q.total`, o de localStorage como `q.totals.total`.
+            const total = q.total ?? q.totals?.total ?? 0;
+            const totalStr = fmtCurrency(total);
+
+            // Estado: viene solo cuando se carga desde la API. localStorage no lo persiste.
+            const statusKey = (q.status || '').toLowerCase();
+            const statusLabel = STATUS_LABELS[statusKey] || q.status || '';
+            const statusBadge = statusLabel
+                ? `<span class="quot-row-status quot-status-${statusKey || 'unknown'}">${statusLabel}</span>`
+                : '';
+
             listHTML += `
                 <div class="quot-row">
                     <div class="quot-row-info">
                         <span class="quot-row-number">${displayName}</span>
                         <span class="quot-row-badge">${typeLabel}</span>
+                        ${statusBadge}
                         <span class="quot-row-client">${clientName}</span>
                         <span class="quot-row-separator">·</span>
                         <span class="quot-row-event">${eventName}</span>
+                        <span class="quot-row-total">${totalStr}</span>
                         <span class="quot-row-date">${dateStr}</span>
                     </div>
                     <div class="quot-row-actions">

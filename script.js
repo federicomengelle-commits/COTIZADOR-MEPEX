@@ -1641,7 +1641,7 @@ const Render = {
         const adminLink = document.createElement('a');
         adminLink.className = 'nav-link nav-admin';
         adminLink.id = 'btn-admin';
-        adminLink.innerHTML = '🔧 Configuración';
+        adminLink.innerHTML = '📚 Catálogo';
         adminLink.href = '#admin-panel';
         adminLink.onclick = (e) => {
             e.preventDefault();
@@ -1664,7 +1664,7 @@ const Render = {
                     <div class="empty-icon"><span class="mp-spinner mp-spinner-lg"></span></div>
                     <h3>Cargando catálogo...</h3>
                     <p>Conectando con la base de datos de items.</p>
-                    <p class="empty-hint">Si no carga, verificá que el servidor esté corriendo (<strong>INICIAR COTIZADOR.bat</strong>).</p>
+                    <p class="empty-hint">Si no carga, revisá la conexión y refrescá la página. Si el problema persiste, contactá al equipo técnico.</p>
                 </div>
             `;
             return;
@@ -2343,10 +2343,12 @@ const Render = {
 
         let subBase = 0;
         let subConAltura = 0;
+        let itemsConPrecioCero = 0;     // counter para banner de advertencia
         // Desglose por categoría: { [catId]: { conAltura, final } }
         const byCategory = {};
         getAllItemsFlat().forEach(({ item, quantity }) => {
             const price = this._parsePrice(item.price);
+            if (price <= 0) itemsConPrecioCero++;
             const lineBase = price * quantity;
             subBase += lineBase;
             const heightMult = heightAffectedCategories.includes(item.category)
@@ -2378,6 +2380,21 @@ const Render = {
         // Sección de parámetros con montos
         // ──────────────────────────────
         let summaryHTML = '';
+
+        // Banner de advertencia si hay items sin precio cargado en el catálogo.
+        // No bloquea exportación — solo avisa para que Fede revise.
+        if (itemsConPrecioCero > 0) {
+            summaryHTML += `
+                <div class="zero-price-warning" role="status">
+                    <span class="warn-icon">⚠</span>
+                    <div class="warn-text">
+                        <strong>${itemsConPrecioCero} item${itemsConPrecioCero === 1 ? '' : 's'} sin precio en el catálogo</strong>
+                        <small>El total puede no reflejar el monto real. Cargá los precios en LOBBY.</small>
+                    </div>
+                </div>
+            `;
+        }
+
         if (qType === 'stand') {
             summaryHTML += `
                 <div class="summary-params">
@@ -2748,16 +2765,18 @@ const Render = {
     // =============================================
     setupGeneralParams() {
         // Input numérico de metraje
+        // Mínimo 1m² — el cotizador acepta cualquier stand chico.
+        // `validateForExport` ya valida `metraje >= 1` así que el input coincide.
         const metrajeInput = document.getElementById('input-metraje');
         if (metrajeInput) {
             metrajeInput.addEventListener('input', (e) => {
-                let value = parseInt(e.target.value) || 9;
-                value = Math.max(9, Math.min(500, value));
+                let value = parseInt(e.target.value) || 1;
+                value = Math.max(1, Math.min(500, value));
                 State.updateGeneralParam('metraje', value);
             });
             metrajeInput.addEventListener('blur', (e) => {
-                let value = parseInt(e.target.value) || 9;
-                value = Math.max(9, Math.min(500, value));
+                let value = parseInt(e.target.value) || 1;
+                value = Math.max(1, Math.min(500, value));
                 e.target.value = value;
             });
         }
@@ -3424,9 +3443,6 @@ const Render = {
             ? parseFloat(price.toString().replace(/[^\d.,-]/g, '').replace(',', '.')) || 0
             : (parseFloat(price) || 0);
 
-        // ========================================
-        // STAND MODE — items globales por categoría
-        // ========================================
         // Helper: calculate loaded price (Base * Height * Modifier * Fee)
         const getLoadedPrice = (item, price) => {
             let loaded = price;
@@ -3444,6 +3460,27 @@ const Render = {
             }
 
             return loaded;
+        };
+
+        // Helper: formato consistente de cada línea de ítem para el PDF.
+        //  · qty > 1 + unidad significativa (m², ml, día): "• 15 m² — Vinilo impreso"
+        //  · qty > 1 + unidad genérica (unidad/set/proyecto) o vacía: "• 15× Taburete JB"
+        //  · qty === 1: "• Cesto Papelero"  (sin prefijo "1x", igual que el modo multi-space lo hacía)
+        const normalizeUnit = (u) => {
+            if (!u) return '';
+            const norm = String(u).toLowerCase();
+            // Unidades genéricas no aportan información visible en el PDF → omitir
+            if (norm === 'unidad' || norm === 'set' || norm === 'proyecto') return '';
+            // m2 → m² (mejor display tipográfico)
+            if (norm === 'm2' || norm === 'm²') return 'm²';
+            return u;
+        };
+        const formatItemLine = (item) => {
+            const qty = item.quantity;
+            const unitLabel = normalizeUnit(item.unit);
+            if (qty === 1) return `• ${item.name}`;
+            if (unitLabel) return `• ${qty} ${unitLabel} — ${item.name}`;
+            return `• ${qty}× ${item.name}`;
         };
 
         // ========================================
@@ -3474,7 +3511,7 @@ const Render = {
 
                     if (yPos > pageHeight - 70) { addDarkPage(); yPos = 25; }
 
-                    const catIcon = categoryIcons[cat.id] || '>>';
+                    // Header del rubro
                     doc.setFont('helvetica', 'bold');
                     doc.setTextColor(...cyanColor);
                     doc.text(cat.name.toUpperCase(), margin, yPos);
@@ -3483,32 +3520,29 @@ const Render = {
                     doc.line(margin, yPos + 2, pageWidth - margin, yPos + 2);
                     yPos += 7;
 
+                    // En Infraestructura damos una línea de contexto (superficie+altura)
+                    // antes de enumerar las piezas individuales.
                     if (isInfrastructure) {
-                        doc.setFont('helvetica', 'normal');
-                        doc.setTextColor(...lightGray);
-                        doc.text(`Superficie: ${params.metraje}m² — Altura: ${heightLabel}`, margin + 5, yPos);
-                        yPos += 5;
                         doc.setFont('helvetica', 'italic');
                         doc.setTextColor(...mediumGray);
-                        doc.text('Construcción modular con sistema OCTEXA', margin + 5, yPos);
+                        doc.text(`Stand de ${params.metraje}m² — Altura: ${heightLabel}`, margin + 5, yPos);
                         yPos += 6;
-
-                        // En Infraestructura STAND, mostramos el total del rubro o desglose?
-                        // La lógica original no mostraba items individuales en Infraestructura Stand.
-                        // Mantendremos esa lógica, pero calculando el total correctamente.
-                    } else {
-                        doc.setFont('helvetica', 'normal');
-                        doc.setTextColor(...lightGray);
-                        groupedItems[cat.id].forEach(item => {
-                            if (yPos > pageHeight - 60) { addDarkPage(); yPos = 25; }
-                            doc.text(`${item.quantity} - ${item.name}`, margin + 5, yPos);
-                            yPos += 5;
-                        });
                     }
 
+                    // Enumerar items en TODAS las categorías (incluida Infraestructura).
+                    // Antes Stand omitía los items de Infraestructura y mostraba sólo
+                    // "Construcción modular con sistema OCTEXA" — quedaba poco transparente.
+                    doc.setFont('helvetica', 'normal');
                     groupedItems[cat.id].forEach(item => {
+                        if (yPos > pageHeight - 60) { addDarkPage(); yPos = 25; }
                         const itemTotal = item.price * item.quantity;
                         catTotal += itemTotal;
+
+                        doc.setTextColor(...lightGray);
+                        doc.text(formatItemLine(item), margin + 5, yPos);
+                        doc.setTextColor(...white);
+                        doc.text(`$${Math.round(itemTotal).toLocaleString('es-AR')}`, pageWidth - margin, yPos, { align: 'right' });
+                        yPos += 5;
                     });
 
                     subtotalLoaded += catTotal;
@@ -3582,11 +3616,8 @@ const Render = {
                             const itemTotal = item.price * item.quantity;
                             spaceTotal += itemTotal;
 
-                            const itemText = item.quantity > 1
-                                ? `• ${item.quantity}x ${item.name}`
-                                : `• ${item.name}`;
                             doc.setTextColor(...lightGray);
-                            doc.text(itemText, margin + 6, yPos);
+                            doc.text(formatItemLine(item), margin + 6, yPos);
                             doc.setTextColor(...white);
                             doc.text(`$${Math.round(itemTotal).toLocaleString('es-AR')}`, pageWidth - margin, yPos, { align: 'right' });
                             yPos += 5;

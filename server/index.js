@@ -101,23 +101,26 @@ function formatProject(row) {
     };
 }
 
-// eventos: id(uuid), nombre, lugar, fecha_armado_inicio, fecha_armado_fin, fecha_evento_inicio, fecha_evento_fin, fecha_desarme, prioridad, estado
+// eventos: id(uuid), nombre, predio, fecha_armado_inicio/fin, fecha_evento_inicio/fin,
+//          fecha_desarme_inicio/fin, hora_*_apertura/cierre, color, notas_operativas, _deleted
+// Nota: las columnas `lugar`, `fecha_desarme`, `prioridad`, `estado` NO existen en la tabla
+// actual — fueron renombradas/eliminadas en el rename `eventos_2026` → `eventos`.
 function formatEvent(row) {
     return {
         id: row.id,
         notionUrl: null,
         name: row.nombre || '',
-        status: row.estado || null,
+        status: null,                                       // columna no existe en `eventos`
         setupDate: row.fecha_armado_inicio || null,
-        teardownDate: row.fecha_desarme || null,
+        teardownDate: row.fecha_desarme_inicio || null,     // antes: row.fecha_desarme
         phone: '',
         pavilion: [],
         totalStands: 0,
         completedStands: 0,
-        priority: row.prioridad || null,
+        priority: null,                                     // columna no existe en `eventos`
         eventStartDate: row.fecha_evento_inicio || null,
         eventEndDate: row.fecha_evento_fin || null,
-        venue: row.lugar || null,
+        venue: row.predio || null,                          // antes: row.lugar
         venueId: null,
         createdAt: row.created_at,
         updatedAt: row.updated_at
@@ -126,12 +129,14 @@ function formatEvent(row) {
 
 // cotizaciones: id(uuid), numero, cliente_id, nombre_evento, tipo_evento, fecha_evento, monto_total, estado, vendedor_id, notas_internas
 //   + nuevas columnas: project_id, event_id, tipo_cotizacion, superficie, tipo_stand, altura, subtotal, iva, fecha_emision, full_state, pdf_url
+//   + columnas de facturación de LOBBY: pyme_*
 function formatQuotation(row) {
     return {
         id: row.id,
         notionUrl: null,
         name: row.numero || '',
         type: row.tipo_cotizacion || null,
+        status: row.estado || null,
         clientIds: row.cliente_id ? [row.cliente_id] : [],
         projectIds: row.project_id ? [row.project_id] : [],
         eventIds: row.event_id ? [row.event_id] : [],
@@ -630,7 +635,7 @@ app.get('/api/quotations', async (req, res) => {
 
         const { data, error } = await supabase
             .from('cotizaciones')
-            .select('id, numero, tipo_cotizacion, cliente_id, project_id, event_id, superficie, tipo_stand, altura, subtotal, iva, monto_total, fecha_emision, pdf_url, created_at, updated_at')
+            .select('id, numero, tipo_cotizacion, estado, cliente_id, project_id, event_id, superficie, tipo_stand, altura, subtotal, iva, monto_total, fecha_emision, pdf_url, created_at, updated_at')
             .order('fecha_emision', { ascending: false, nullsFirst: false });
 
         if (error) throw error;

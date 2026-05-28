@@ -2701,7 +2701,53 @@ input[type="checkbox"] {
     color: var(--text-muted);
     font-size: 0.8rem;
     white-space: nowrap;
+}
+
+/* Total $ de la cotización en el modal "Cargar" */
+.quot-row-total {
+    color: var(--color-primary);
+    font-family: var(--font-heading);
+    font-weight: 600;
+    font-size: 0.9rem;
+    white-space: nowrap;
     margin-left: auto;
+    letter-spacing: 0.5px;
+}
+
+/* Badge de estado (borrador / aprobada / rechazada / enviada) */
+.quot-row-status {
+    font-size: 0.65rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 2px 7px;
+    border-radius: 4px;
+    border: 1px solid transparent;
+    white-space: nowrap;
+}
+
+.quot-status-borrador {
+    background: rgba(140, 140, 140, 0.15);
+    color: var(--text-secondary);
+    border-color: rgba(140, 140, 140, 0.3);
+}
+
+.quot-status-aprobada {
+    background: rgba(0, 229, 255, 0.12);
+    color: var(--color-primary);
+    border-color: rgba(0, 229, 255, 0.4);
+}
+
+.quot-status-rechazada {
+    background: rgba(255, 80, 80, 0.12);
+    color: #ff8080;
+    border-color: rgba(255, 80, 80, 0.4);
+}
+
+.quot-status-enviada {
+    background: rgba(243, 122, 31, 0.12);
+    color: var(--color-secondary);
+    border-color: rgba(243, 122, 31, 0.4);
 }
 
 .quot-row-actions {
@@ -4588,4 +4634,50 @@ input[type="checkbox"] {
     .template-row {
         flex-wrap: wrap;
     }
+}
+
+/* =============================================
+   BANNER: items sin precio (catálogo $0)
+   Aparece en el summary cuando hay items cargados con precio_cliente=0.
+   No bloquea exportación — sólo advierte.
+   ============================================= */
+.zero-price-warning {
+    display: flex;
+    gap: var(--spacing-md);
+    align-items: center;
+    background: rgba(243, 122, 31, 0.12);
+    border: 1px solid rgba(243, 122, 31, 0.4);
+    border-left: 3px solid var(--color-secondary);
+    padding: var(--spacing-md);
+    border-radius: var(--radius-md);
+    margin-bottom: var(--spacing-md);
+}
+
+.zero-price-warning .warn-icon {
+    font-size: 1.5rem;
+    color: var(--color-secondary);
+    line-height: 1;
+    flex-shrink: 0;
+}
+
+.zero-price-warning .warn-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.zero-price-warning .warn-text strong {
+    font-size: 0.85rem;
+    color: var(--text-primary);
+    font-family: var(--font-body);
+    font-weight: 600;
+    letter-spacing: 0;
+    text-transform: none;
+}
+
+.zero-price-warning .warn-text small {
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+    line-height: 1.3;
 }
