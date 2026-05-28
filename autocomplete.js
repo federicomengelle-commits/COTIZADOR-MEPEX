@@ -332,13 +332,18 @@ const Autocomplete = {
                 State.updateGeneralParam('proyecto', item.name || '');
                 State.updateGeneralParam('proyectoData', item);
 
-                // Si el proyecto tiene relaciones, cargar cliente y evento
+                // Autopoblar cliente y evento desde el proyecto SOLO si los inputs
+                // están vacíos. Si el usuario ya tipeó o eligió algo, no pisar.
+                // (Antes el código sobreescribía siempre — bug: cliente Egeo cargado
+                // se reemplazaba al elegir un proyecto con cliente distinto.)
                 const fullProject = await API.getProject(item.id);
                 if (fullProject) {
-                    if (fullProject.client) {
+                    const clientEmpty = !this.elements.clientInput?.value?.trim();
+                    const eventEmpty = !this.elements.eventInput?.value?.trim();
+                    if (fullProject.client && clientEmpty) {
                         this.selectItem('client', fullProject.client);
                     }
-                    if (fullProject.event) {
+                    if (fullProject.event && eventEmpty) {
                         this.selectItem('event', fullProject.event);
                     }
                 }

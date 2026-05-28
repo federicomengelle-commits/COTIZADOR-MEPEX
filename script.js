@@ -2299,6 +2299,28 @@ const Render = {
         return `${sign}$${Math.round(Math.abs(n)).toLocaleString('es-AR')}`;
     },
 
+    // Normaliza la unidad para mostrar: oculta "unidad/set/proyecto" (no aportan),
+    // muestra m² con superíndice, deja pasar el resto tal cual.
+    _normalizeUnit(u) {
+        if (!u) return '';
+        const norm = String(u).toLowerCase();
+        if (norm === 'unidad' || norm === 'set' || norm === 'proyecto') return '';
+        if (norm === 'm2' || norm === 'm²') return 'm²';
+        return u;
+    },
+
+    // Formato canónico de línea de ítem, compartido entre UI y PDF.
+    //  · qty === 1                          → "Cesto Papelero"
+    //  · qty > 1 + unidad significativa     → "15 m² — Vinilo impreso y colocado"
+    //  · qty > 1 + unidad genérica o vacía  → "15× Taburete JB"
+    _formatItemLine(item) {
+        const qty = item.quantity;
+        const unitLabel = this._normalizeUnit(item.unit);
+        if (qty === 1) return item.name;
+        if (unitLabel) return `${qty} ${unitLabel} — ${item.name}`;
+        return `${qty}× ${item.name}`;
+    },
+
     updateSummary() {
         const summaryList = document.getElementById('summary-list');
         const subtotalEl = document.getElementById('subtotal-display');
@@ -2485,7 +2507,7 @@ const Render = {
                         if (isInfrastructure) return;
                         summaryHTML += `
                             <div class="summary-item">
-                                <span class="summary-item-name">${item.quantity > 1 ? item.quantity + 'x ' : ''}${item.name}</span>
+                                <span class="summary-item-name">${this._formatItemLine(item)}</span>
                             </div>`;
                     });
 
@@ -2533,7 +2555,7 @@ const Render = {
 
                         summaryHTML += `
                             <div class="summary-item">
-                                <span class="summary-item-name">${data.quantity > 1 ? data.quantity + 'x ' : ''}${item.name}</span>
+                                <span class="summary-item-name">${this._formatItemLine({ ...item, quantity: data.quantity })}</span>
                                 <span class="summary-item-total">${this._fmt(shownTotal)}</span>
                             </div>`;
                     });
@@ -3446,26 +3468,9 @@ const Render = {
             return loaded;
         };
 
-        // Helper: formato consistente de cada línea de ítem para el PDF.
-        //  · qty > 1 + unidad significativa (m², ml, día): "• 15 m² — Vinilo impreso"
-        //  · qty > 1 + unidad genérica (unidad/set/proyecto) o vacía: "• 15× Taburete JB"
-        //  · qty === 1: "• Cesto Papelero"  (sin prefijo "1x", igual que el modo multi-space lo hacía)
-        const normalizeUnit = (u) => {
-            if (!u) return '';
-            const norm = String(u).toLowerCase();
-            // Unidades genéricas no aportan información visible en el PDF → omitir
-            if (norm === 'unidad' || norm === 'set' || norm === 'proyecto') return '';
-            // m2 → m² (mejor display tipográfico)
-            if (norm === 'm2' || norm === 'm²') return 'm²';
-            return u;
-        };
-        const formatItemLine = (item) => {
-            const qty = item.quantity;
-            const unitLabel = normalizeUnit(item.unit);
-            if (qty === 1) return `• ${item.name}`;
-            if (unitLabel) return `• ${qty} ${unitLabel} — ${item.name}`;
-            return `• ${qty}× ${item.name}`;
-        };
+        // Atajo local al helper compartido (definido en Render._formatItemLine)
+        // para que PDF y UI usen exactamente el mismo formato de línea de ítem.
+        const formatItemLine = (item) => '• ' + this._formatItemLine(item);
 
         // ========================================
         // STAND MODE — items globales por categoría
