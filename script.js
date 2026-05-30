@@ -2314,7 +2314,7 @@ const Render = {
     //  · qty > 1 + unidad significativa     → "15 m² — Vinilo impreso y colocado"
     //  · qty > 1 + unidad genérica o vacía  → "15× Taburete JB"
     _formatItemLine(item) {
-        const qty = item.quantity;
+        const qty = Number(item.quantity) || 1;
         const unitLabel = this._normalizeUnit(item.unit);
         if (qty === 1) return item.name;
         if (unitLabel) return `${qty} ${unitLabel} — ${item.name}`;
