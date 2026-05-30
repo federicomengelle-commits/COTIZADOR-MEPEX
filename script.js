@@ -879,9 +879,8 @@ const Compare = {
         const params = q.params || {};
         const qType = q.type || 'stand';
         const heightAffected = DATABASE.heightAffectedCategories || ['infrastructure', 'lighting'];
-        const hMult = params.height?.multiplier || 1;
-        const modMult = 1 + ((params.modifier?.percentage || 0) / 100);
-        const feeMult = params.fee?.enabled ? (1 + (params.fee.percentage || 0) / 100) : 1;
+        // Cotización guardada → estructura anidada (fee como entero). Pricing lo normaliza.
+        const pricingCtx = Pricing.contextFromSavedParams(params, heightAffected);
 
         const itemsMap = {};
         let subtotal = 0;
@@ -893,10 +892,9 @@ const Compare = {
             if (qty <= 0) return;
             const cur = DB.getItemById(id);
             const name = cur?.name || entry.name || id;
-            const base = cur ? (typeof Render !== 'undefined' && Render._parsePrice ? Render._parsePrice(cur.price) : parseFloat(cur.price) || 0) : 0;
+            const base = cur ? Pricing.parsePrice(cur.price) : 0;
             const cat = cur?.category;
-            const h = heightAffected.includes(cat) ? hMult : 1;
-            const loaded = base * h * modMult * feeMult;
+            const loaded = Pricing.loadedUnitPrice(base, cat, pricingCtx);
             const sub = loaded * qty;
             subtotal += sub;
             itemCount += 1;
@@ -2286,11 +2284,9 @@ const Render = {
         if (input?.value.trim()) this.applySearchFilter(input.value.trim());
     },
 
-    // Helper: parse un precio numérico de forma consistente
+    // Helper: parse un precio numérico de forma consistente (delega en Pricing)
     _parsePrice(price) {
-        return typeof price === 'string'
-            ? parseFloat(price.toString().replace(/[^\d.,-]/g, '').replace(',', '.')) || 0
-            : (parseFloat(price) || 0);
+        return Pricing.parsePrice(price);
     },
 
     // Helper: formato de moneda en ARS
@@ -2363,38 +2359,13 @@ const Render = {
             return flat;
         };
 
-        let subBase = 0;
-        let subConAltura = 0;
-        // Desglose por categoría: { [catId]: { conAltura, final } }
-        const byCategory = {};
-        getAllItemsFlat().forEach(({ item, quantity }) => {
-            const price = this._parsePrice(item.price);
-            const lineBase = price * quantity;
-            subBase += lineBase;
-            const heightMult = heightAffectedCategories.includes(item.category)
-                ? params.heightMultiplier : 1;
-            const lineConAltura = lineBase * heightMult;
-            subConAltura += lineConAltura;
-
-            if (!byCategory[item.category]) {
-                byCategory[item.category] = { conAltura: 0, final: 0 };
-            }
-            byCategory[item.category].conAltura += lineConAltura;
-        });
-        const subConModifier = subConAltura * modifierMultiplier;
-        const subConFee = params.includeFee
-            ? subConModifier * (1 + params.feePercentage)
-            : subConModifier;
-
-        // Propagar modifier + fee a cada categoría para calcular el "final"
-        const catMultiplier = modifierMultiplier * (params.includeFee ? (1 + params.feePercentage) : 1);
-        Object.keys(byCategory).forEach(catId => {
-            byCategory[catId].final = byCategory[catId].conAltura * catMultiplier;
-        });
-
-        const aporteAltura = subConAltura - subBase;
-        const aporteModifier = subConModifier - subConAltura;
-        const aporteFee = subConFee - subConModifier;
+        // Cálculo centralizado en Pricing.compute (fuente única de la fórmula).
+        const pricingCtx = Pricing.contextFromLiveParams(params, heightAffectedCategories);
+        const calc = Pricing.compute(getAllItemsFlat(), pricingCtx);
+        const {
+            subBase, subConAltura, subConModifier, subConFee,
+            byCategory, aporteAltura, aporteModifier, aporteFee,
+        } = calc;
 
         // ──────────────────────────────
         // Sección de parámetros con montos
@@ -3082,9 +3053,7 @@ const Render = {
         }
 
         const heightAffected = DATABASE.heightAffectedCategories || ['infrastructure', 'lighting'];
-        const hMult = params.heightMultiplier || 1;
-        const modMult = 1 + ((params.modifierPercentage || 0) / 100);
-        const feeMult = params.includeFee ? (1 + params.feePercentage) : 1;
+        const pricingCtx = Pricing.contextFromLiveParams(params, heightAffected);
 
         // Construir filas: header + metadata + items + totales
         const rows = [];
@@ -3118,8 +3087,7 @@ const Render = {
         let runningTotal = 0;
         const pushItem = (item, qty, spaceName = '') => {
             const base = this._parsePrice(item.price);
-            const h = heightAffected.includes(item.category) ? hMult : 1;
-            const loadedUnit = base * h * modMult * feeMult;
+            const loadedUnit = Pricing.loadedUnitPrice(base, item.category, pricingCtx);
             const subtotal = loadedUnit * qty;
             runningTotal += subtotal;
             const cat = DB.getCategories().find(c => c.id === item.category);
@@ -3440,33 +3408,15 @@ const Render = {
         };
 
         const heightAffectedCategories = DATABASE.heightAffectedCategories || ['infrastructure', 'lighting'];
-        const modifierMultiplier = 1 + (params.modifierPercentage / 100);
+        const pricingCtx = Pricing.contextFromLiveParams(params, heightAffectedCategories);
 
         let adjustedSubtotal = 0;
 
-        // Helper: parse price
-        const parsePrice = (price) => typeof price === 'string'
-            ? parseFloat(price.toString().replace(/[^\d.,-]/g, '').replace(',', '.')) || 0
-            : (parseFloat(price) || 0);
+        // Helper: parse price (delega en Pricing para mantener una sola fuente)
+        const parsePrice = (price) => Pricing.parsePrice(price);
 
-        // Helper: calculate loaded price (Base * Height * Modifier * Fee)
-        const getLoadedPrice = (item, price) => {
-            let loaded = price;
-            // 1. Modificador global (e.g. correlativo a urgencia, etc)
-            loaded *= modifierMultiplier;
-
-            // 2. Multiplicador de altura (solo si aplica)
-            if (heightAffectedCategories.includes(item.category)) {
-                loaded *= params.heightMultiplier;
-            }
-
-            // 3. Fee de agencia (si está habilitado)
-            if (params.includeFee) {
-                loaded *= (1 + params.feePercentage);
-            }
-
-            return loaded;
-        };
+        // Helper: precio cargado (Base × Altura × Modificador × Fee) vía Pricing.
+        const getLoadedPrice = (item, price) => Pricing.loadedUnitPrice(price, item.category, pricingCtx);
 
         // Atajo local al helper compartido (definido en Render._formatItemLine)
         // para que PDF y UI usen exactamente el mismo formato de línea de ítem.
