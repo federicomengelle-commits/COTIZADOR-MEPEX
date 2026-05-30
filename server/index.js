@@ -50,7 +50,12 @@ app.use(express.static(path.join(__dirname, '..')));
 // =============================================
 // Mapean columnas reales de Supabase al shape que espera el frontend
 
-// catalogo_items: id(int), codigo, nombre, rubro, categoria, descripcion, unidad, precio_cliente, favorito, activo
+// catalogo_items: id(int), codigo, nombre, rubro, categoria, descripcion, unidad,
+//   precio_cliente, precio_alquiler, es_cotizable, favorito, activo, _deleted
+//
+// PRECIO: el cotizador usa `precio_alquiler` (lo que muestra la "Lista de Precios"
+// del módulo Costos de LOBBY), NO `precio_cliente`. precio_cliente quedó como
+// columna legacy casi vacía (8/226). El precio canónico de venta es precio_alquiler.
 function formatCatalogItem(row) {
     return {
         id: String(row.id),
@@ -61,7 +66,7 @@ function formatCatalogItem(row) {
         rubro: row.rubro || '',
         category: row.categoria || '',
         unit: row.unidad || null,
-        price: parseFloat(row.precio_cliente) || 0,
+        price: parseFloat(row.precio_alquiler) || 0,
         favorite: row.favorito || false,
         createdAt: row.created_at,
         updatedAt: row.updated_at
@@ -193,16 +198,21 @@ app.get('/api/catalog', async (req, res) => {
     try {
         console.log('📦 Fetching catalog from Supabase...');
 
+        // Solo items marcados COTIZABLES en LOBBY (es_cotizable=true) — espejo de la
+        // "Lista de Precios" del módulo Costos. El catálogo del cotizador crece a
+        // medida que se marcan items como cotizables allá. Se excluyen los borrados.
         const { data, error } = await supabase
             .from('catalogo_items')
             .select('*')
+            .eq('es_cotizable', true)
             .or('activo.eq.true,activo.is.null')
+            .or('_deleted.eq.false,_deleted.is.null')
             .order('nombre');
 
         if (error) throw error;
 
         const items = data.map(formatCatalogItem);
-        console.log(`✅ Fetched ${items.length} items from Supabase`);
+        console.log(`✅ Fetched ${items.length} items cotizables from Supabase`);
 
         res.json({
             success: true,
