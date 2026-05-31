@@ -3177,23 +3177,25 @@ const Render = {
         const margin = 20;
         const contentWidth = pageWidth - (margin * 2);
 
-        // Número de cotización secuencial (API-first, localStorage fallback)
+        // Número de cotización: SOLO desde la API (contador atómico en la DB).
+        // Sin fallback localStorage — generaba números fantasma que colisionaban
+        // (ej. COT-2026-0008 en PDF pero no en DB). Si la API no responde, se
+        // bloquea la exportación: no hay número válido = no hay cotización.
         let cotNumber;
-        const currentYear = new Date().getFullYear();
         try {
-            if (typeof API !== 'undefined' && API.isConnected) {
-                const numData = await API.getNextQuotationNumber();
-                cotNumber = numData.formatted;
-                console.log(`🔢 Número de cotización obtenido de la API: ${cotNumber}`);
-            } else {
-                throw new Error('API not available');
+            if (typeof API === 'undefined' || !API.isConnected) {
+                throw new Error('API no conectada');
             }
+            const numData = await API.getNextQuotationNumber();
+            if (!numData?.formatted) throw new Error('respuesta sin número');
+            cotNumber = numData.formatted;
+            console.log(`🔢 Número de cotización reservado: ${cotNumber}`);
         } catch (e) {
-            console.warn('⚠️ No se pudo obtener número de la API, usando localStorage:', e.message);
-            const storageKey = `mepex_cot_seq_${currentYear}`;
-            let cotSeq = parseInt(localStorage.getItem(storageKey) || '0') + 1;
-            localStorage.setItem(storageKey, cotSeq.toString());
-            cotNumber = `COT-${currentYear}-${String(cotSeq).padStart(4, '0')}`;
+            console.error('❌ No se pudo reservar número de cotización:', e.message);
+            if (typeof Toast !== 'undefined') {
+                Toast.error('No se pudo conectar con el servidor para numerar la cotización. Revisá la conexión e intentá de nuevo.');
+            }
+            return; // aborta la exportación — no se genera PDF sin número válido
         }
 
         // Colores MEPEX (dark theme)

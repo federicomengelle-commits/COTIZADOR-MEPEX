@@ -390,10 +390,11 @@ const API = {
     // ENDPOINTS: COTIZACIONES
     // =============================================
 
-    // Obtener el siguiente número de cotización desde la API
+    // Reservar el siguiente número de cotización (POST: consume un número del
+    // contador atómico en la DB). Sin fallback local — si falla, el front bloquea.
     async getNextQuotationNumber() {
-        const response = await this.request('/cotizaciones/next-number');
-        return response; // { success, year, next, formatted, existingCount }
+        const response = await this.request('/cotizaciones/next-number', { method: 'POST' });
+        return response; // { success, year, next, formatted }
     },
 
     async getQuotations() {

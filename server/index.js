@@ -595,42 +595,25 @@ app.get('/api/events/search', async (req, res) => {
 // ENDPOINTS: COTIZACIONES — NEXT NUMBER (tabla: cotizaciones)
 // =============================================
 
-app.get('/api/cotizaciones/next-number', async (req, res) => {
+// POST (no GET): consume un número del contador atómico, no debe cachearse
+// ni prefetcharse. La función SQL siguiente_numero_cotizacion(anio) incrementa
+// y devuelve en una sola operación → sin race conditions ni números duplicados.
+app.post('/api/cotizaciones/next-number', async (req, res) => {
     try {
         const currentYear = new Date().getFullYear();
-        const prefix = `COT-${currentYear}-`;
-        console.log(`🔢 Buscando siguiente número de cotización para ${currentYear}...`);
+        console.log(`🔢 Reservando siguiente número de cotización para ${currentYear}...`);
 
         const { data, error } = await supabase
-            .from('cotizaciones')
-            .select('numero')
-            .like('numero', `${prefix}%`);
+            .rpc('siguiente_numero_cotizacion', { p_anio: currentYear });
 
         if (error) throw error;
 
-        const regex = /^COT-(\d{4})-(\d{4})$/;
-        let maxSeq = 0;
-
-        (data || []).forEach(row => {
-            const match = row.numero?.match(regex);
-            if (match && parseInt(match[1]) === currentYear) {
-                const seq = parseInt(match[2]);
-                if (seq > maxSeq) maxSeq = seq;
-            }
-        });
-
-        const nextSeq = maxSeq + 1;
+        const nextSeq = data;  // entero devuelto por la función
         const formatted = `COT-${currentYear}-${String(nextSeq).padStart(4, '0')}`;
 
-        console.log(`✅ Siguiente cotización: ${formatted} (${(data || []).length} encontradas en ${currentYear})`);
+        console.log(`✅ Número reservado: ${formatted}`);
 
-        res.json({
-            success: true,
-            year: currentYear,
-            next: nextSeq,
-            formatted,
-            existingCount: (data || []).length
-        });
+        res.json({ success: true, year: currentYear, next: nextSeq, formatted });
 
     } catch (error) {
         console.error('❌ Error obteniendo next-number:', error.message);
