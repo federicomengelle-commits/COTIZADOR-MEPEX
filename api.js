@@ -115,31 +115,9 @@ const API = {
         return response.items;
     },
 
-    // Actualizar item (admin mode)
-    async updateItem(itemId, data) {
-        const response = await this.request(`/catalog/${itemId}`, {
-            method: 'PUT',
-            body: JSON.stringify(data)
-        });
-
-        // Invalidar cache
-        this.cache.catalog = null;
-
-        return response.item;
-    },
-
-    // Crear nuevo item
-    async createItem(data) {
-        const response = await this.request('/catalog', {
-            method: 'POST',
-            body: JSON.stringify(data)
-        });
-
-        // Invalidar cache
-        this.cache.catalog = null;
-
-        return response.item;
-    },
+    // NOTA: updateItem/createItem (escritura del catálogo) se eliminaron — el
+    // cotizador es read-only sobre catalogo_items (la edición vive en Costos de
+    // LOBBY). Estaban sin uso y apuntaban a endpoints ya removidos del server.
 
     // =============================================
     // SYNC CON DATABASE LOCAL

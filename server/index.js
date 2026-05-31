@@ -304,73 +304,12 @@ app.get('/api/catalog/category/:category', async (req, res) => {
     }
 });
 
-app.put('/api/catalog/:itemId', async (req, res) => {
-    try {
-        const { itemId } = req.params;
-        const { price, name, description, unit, category } = req.body;
-
-        console.log(`✏️ Updating item: ${itemId}`);
-
-        const updateData = {};
-        if (price !== undefined) updateData.precio_cliente = price;
-        if (name !== undefined) updateData.nombre = name;
-        if (description !== undefined) updateData.descripcion = description;
-        if (unit !== undefined) updateData.unidad = unit;
-        if (category !== undefined) {
-            updateData.categoria = Array.isArray(category) ? category.join(', ') : category;
-        }
-
-        const { data, error } = await supabase
-            .from('catalogo_items')
-            .update(updateData)
-            .eq('id', parseInt(itemId))
-            .select()
-            .single();
-
-        if (error) throw error;
-
-        console.log('✅ Item updated successfully');
-        res.json({ success: true, item: formatCatalogItem(data) });
-
-    } catch (error) {
-        console.error('❌ Error updating item:', error.message);
-        res.status(500).json({ success: false, error: error.message });
-    }
-});
-
-app.post('/api/catalog', async (req, res) => {
-    try {
-        const { name, code, description, category, unit, price } = req.body;
-
-        console.log(`➕ Creating new item: ${name}`);
-
-        const newRow = {
-            nombre: name || '',
-            codigo: code || '',
-            descripcion: description || '',
-            categoria: Array.isArray(category) ? category.join(', ') : (category || ''),
-            unidad: unit || null,
-            precio_cliente: price || 0,
-            favorito: false,
-            activo: true
-        };
-
-        const { data, error } = await supabase
-            .from('catalogo_items')
-            .insert(newRow)
-            .select()
-            .single();
-
-        if (error) throw error;
-
-        console.log('✅ Item created successfully');
-        res.json({ success: true, item: formatCatalogItem(data) });
-
-    } catch (error) {
-        console.error('❌ Error creating item:', error.message);
-        res.status(500).json({ success: false, error: error.message });
-    }
-});
+// NOTA: los endpoints de ESCRITURA del catálogo (PUT /api/catalog/:id y
+// POST /api/catalog) se eliminaron en el barrido de consistencia. Eran código
+// muerto (ningún caller en el front) y además violaban la regla del proyecto:
+// catalogo_items es de LOBBY/Costos, el cotizador SOLO LEE. Encima escribían
+// precio_cliente, que ya no es la columna de precio (ahora es precio_alquiler).
+// El alta/edición de items se hace en el módulo Costos de LOBBY.
 
 // =============================================
 // ENDPOINTS: CLIENTES (tabla: clientes)
@@ -947,8 +886,6 @@ app.listen(PORT, () => {
     console.log('      GET  /api/catalog             - Get all items');
     console.log('      GET  /api/catalog/schema      - Get DB structure');
     console.log('      GET  /api/catalog/category/:c - Filter by category');
-    console.log('      PUT  /api/catalog/:id         - Update item');
-    console.log('      POST /api/catalog             - Create item');
     console.log('      GET  /api/clients             - Get all clients');
     console.log('      GET  /api/clients/search?q=   - Search clients');
     console.log('      GET  /api/projects            - Get all projects');
@@ -956,7 +893,7 @@ app.listen(PORT, () => {
     console.log('      GET  /api/projects/:id        - Get project + relations');
     console.log('      GET  /api/events              - Get all events');
     console.log('      GET  /api/events/search?q=    - Search events');
-    console.log('      GET  /api/cotizaciones/next-number - Next COT number');
+    console.log('      POST /api/cotizaciones/next-number - Reserve next COT number');
     console.log('      GET  /api/quotations          - List quotations');
     console.log('      GET  /api/quotations/:id      - Get quotation + state');
     console.log('      POST /api/quotations          - Create quotation');
