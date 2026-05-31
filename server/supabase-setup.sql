@@ -1,8 +1,10 @@
 -- =============================================
 -- MEPEX COTIZADOR — Supabase Setup
 -- =============================================
--- Tablas reutilizadas del LOBBY: catalogo_items, clientes, eventos_2026, proyectos_2026
--- Solo se agregan columnas a cotizaciones para el cotizador
+-- Tablas reutilizadas del LOBBY: catalogo_items, clientes, eventos, proyectos
+-- Solo se agregan columnas a cotizaciones para el cotizador.
+-- Tablas propias del cotizador: ver migrations/002 (cotizacion_items +
+-- cotizacion_espacios) y migrations/003 (cotizacion_numerador + función).
 -- =============================================
 
 -- Columnas nuevas para cotizaciones (las del cotizador)

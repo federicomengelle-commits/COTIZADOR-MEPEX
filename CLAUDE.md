@@ -5,14 +5,19 @@ SPA vanilla JS para cotizar stands/expos/alquiler. Desplegada en `http://195.200
 ## Reglas duraderas (leer antes de tocar nada)
 
 ### 🟥 Tablas compartidas con LOBBY — coordinar SIEMPRE
-- `catalogo_items` la usa el módulo **Costos** de LOBBY. Tiene 40+ columnas, muchas del costing (margen_*, pct_*, snapshot_*). Cualquier columna nueva debe coordinarse con LOBBY.
+- `catalogo_items` la usa el módulo **Costos** de LOBBY. Tiene 40+ columnas, muchas del costing (margen_*, pct_*, snapshot_*). Cualquier columna nueva debe coordinarse con LOBBY. El cotizador **solo lee** (no escribe; el alta/edición de items vive en Costos).
+  - **Precio**: el cotizador usa `precio_alquiler` (la "Lista de Precios" de Costos), redondeado a pesos enteros en `formatCatalogItem`. NO `precio_cliente` (columna legacy casi vacía).
+  - **Filtro**: `/api/catalog` devuelve solo `es_cotizable=true` (espejo de la Lista de Precios). El catálogo crece a medida que se marcan items cotizables en Costos.
 - `clientes`, `proyectos`, `eventos` son del CRM de LOBBY. El cotizador solo lee. NO modificar columnas existentes.
 - `cotizaciones` está extendida con ALTERs (ver `server/supabase-setup.sql`) y además tiene columnas `pyme_*` de la integración de facturación de LOBBY. No tocar esas tampoco.
+- **Tablas propias del cotizador** (creadas en `server/migrations/`): `cotizacion_items` + `cotizacion_espacios` (normalización de lo cotizado, snapshot inmutable del precio por línea) y `cotizacion_numerador` (contador atómico por año + función `siguiente_numero_cotizacion`). Referencian `cotizaciones`/`catalogo_items` pero no las modifican.
 
 ### 🟥 Tres modos de cotización con reglas distintas
 - **Stand**: stand único, params (superficie, frente, profundidad, tipo, altura, modificador). Items en lista plana. Auto-cálculo de cantidades por perímetro/spots. **Único modo que usa multiplicador global de altura**.
 - **Expo**: multi-espacio, items por espacio, sin auto-cálculo, sin multiplicador.
-- **Alquiler**: igual estructura que Expo, pricing distinto (debería usar `precio_alquiler` pero hoy usa `precio_cliente` — bug a confirmar).
+- **Alquiler**: igual estructura que Expo. Los 3 modos usan `precio_alquiler` como precio base (resuelto en C1.5; antes el código leía `precio_cliente`).
+
+**Pricing centralizado**: la fórmula vive en `pricing.js` (`Pricing.loadedUnitPrice` + `Pricing.compute`). Las 4 vistas (summary, PDF, CSV, Compare) la consumen. NO duplicar la fórmula — tocar `pricing.js`.
 
 Cualquier cambio que toque pricing/render debe respetar y documentar la diferencia por modo. Antes de modificar un `if (type === 'stand')`, mapear todos los demás IFs por modo.
 
@@ -29,7 +34,7 @@ Favorites, Autosave, Templates, Compare, cotizaciones guardadas, número secuenc
 
 ### 🟥 Zonas frágiles — no tocar sin avisar
 - **Flujo de guardado a Supabase** (`api.js` saveQuotation + `server/index.js` `/api/quotations` POST). Recién arreglado, funciona.
-- **Numerador secuencial** (`/api/cotizaciones/next-number`) — lee `numero` de `cotizaciones` y matchea regex `^COT-(\d{4})-(\d{4})$`. Si cambiás el formato del número, romper esto rompe TODO.
+- **Numerador secuencial** (`POST /api/cotizaciones/next-number`) — usa la función SQL atómica `siguiente_numero_cotizacion(anio)` sobre la tabla `cotizacion_numerador` (contador por año). NO hay fallback localStorage: si la API cae, el front bloquea el export. Formato `COT-YYYY-NNNN`. Si cambiás el formato, actualizá la función SQL y el padStart del server.
 - **Upload de PDF a Storage** (`POST /api/quotations/:id/pdf`).
 
 ## Stack
@@ -38,7 +43,11 @@ Favorites, Autosave, Templates, Compare, cotizaciones guardadas, número secuenc
 - Supabase (PostgreSQL + Auth + Storage). URL: `selnevalaeykdrgycvdz.supabase.co`.
 - Express backend en `server/index.js` (port 3001 local, `/cotizador-api/api` en prod).
 - jsPDF para PDFs.
-- VPS Hostinger 195.200.1.250 (Ubuntu 24.04). Deploy: `~/pull-cotizador.sh`.
+- VPS Hostinger 195.200.1.250 (Ubuntu 24.04). El server corre con **pm2** como `cotizador-api`.
+  - Deploy completo (frontend + backend): `cd ~/cotizador && git pull origin main && pm2 restart cotizador-api`
+  - Solo frontend (HTML/CSS/JS de browser): alcanza con `git pull` + Ctrl+F5. Si tocás `server/`, el `pm2 restart` es obligatorio.
+  - Migraciones SQL (`server/migrations/`): se corren a mano en el editor SQL de Supabase (la API REST no hace DDL).
+  - La key nueva de Supabase (`sb_secret_…`) está en `server/.env` como `SUPABASE_SERVICE_KEY` (la legacy service_role fue deshabilitada en 2026-04).
 
 ## Estructura del repo
 
