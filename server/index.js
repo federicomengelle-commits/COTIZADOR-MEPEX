@@ -66,7 +66,11 @@ function formatCatalogItem(row) {
         rubro: row.rubro || '',
         category: row.categoria || '',
         unit: row.unidad || null,
-        price: parseFloat(row.precio_alquiler) || 0,
+        // Redondeo a pesos enteros: precio_alquiler viene con decimales del costeo
+        // de LOBBY (ej. 25273.8) que son artefacto del margen, no plata real. La
+        // tarjeta ya mostraba el valor redondeado; redondear acá en el origen hace
+        // que tarjeta = cálculo = PDF = CSV y la cuenta cierre al peso.
+        price: Math.round(parseFloat(row.precio_alquiler) || 0),
         favorite: row.favorito || false,
         createdAt: row.created_at,
         updatedAt: row.updated_at
