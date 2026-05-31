@@ -72,6 +72,13 @@ function formatCatalogItem(row) {
         // que tarjeta = cálculo = PDF = CSV y la cuenta cierre al peso.
         price: Math.round(parseFloat(row.precio_alquiler) || 0),
         favorite: row.favorito || false,
+        // Variantes paramétricas (familia + medida). Permiten agrupar items del
+        // mismo producto en distintas medidas bajo una sola card con selector.
+        // Hoy ningún item cotizable es paramétrico → el front los ignora hasta
+        // que se marquen cotizables en Costos.
+        parametric: row.parametrico || false,
+        familia: row.familia || null,
+        medidaMm: row.medida_mm != null ? parseInt(row.medida_mm) : null,
         createdAt: row.created_at,
         updatedAt: row.updated_at
     };

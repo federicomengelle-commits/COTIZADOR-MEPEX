@@ -215,6 +215,11 @@ const API = {
             // Campos originales de la DB para mostrar en la tabla
             originalCategory: apiItem.category || '',   // Etiqueta original (Audiovisual, Tableros, etc)
             originalRubro: apiItem.rubro || '',          // RUBRO original
+            // Variantes paramétricas (agrupado por familia + medida). Inertes hasta
+            // que existan items cotizables paramétricos (ver C4 / render de variantes).
+            parametric: apiItem.parametric || false,
+            familia: apiItem.familia || null,
+            medidaMm: apiItem.medidaMm != null ? apiItem.medidaMm : null,
             type: 'counter', // Por defecto counter
             autoCalculate: false,
             favorite: apiItem.favorite || false,
