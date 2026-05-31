@@ -2790,7 +2790,11 @@ const Render = {
                 document.querySelectorAll('.height-chip').forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
                 State.updateGeneralParam('heightType', btn.dataset.height);
-                State.updateGeneralParam('heightMultiplier', parseFloat(btn.dataset.multiplier));
+                // Fuente única del multiplicador: DATABASE.heightMultipliers (no el
+                // data-multiplier del HTML, que quedaba duplicado y podía divergir
+                // del snapshot guardado). El data-multiplier queda solo informativo.
+                const hm = DATABASE.heightMultipliers.find(h => h.id === btn.dataset.height);
+                State.updateGeneralParam('heightMultiplier', hm ? hm.multiplier : 1);
             });
         });
 

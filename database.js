@@ -83,10 +83,10 @@ const DATABASE = {
     // NOTA: Solo aplican a categorías "infrastructure" y "lighting"
     heightMultipliers: [
         { id: "standard", name: "Estándar", height: "2,50m", multiplier: 1.0 },
-        { id: "media", name: "Media", height: "3,00m", multiplier: 1.15 },
-        { id: "plus", name: "Plus", height: "3,50m", multiplier: 1.25 },
-        { id: "extra", name: "Extra", height: "4,00m", multiplier: 1.4 },
-        { id: "maxima", name: "Máxima", height: "5,00m", multiplier: 1.7 }
+        { id: "media", name: "Media", height: "3,00m", multiplier: 1.05 },
+        { id: "plus", name: "Plus", height: "3,50m", multiplier: 1.10 },
+        { id: "extra", name: "Extra", height: "4,00m", multiplier: 1.20 },
+        { id: "maxima", name: "Máxima", height: "5,00m", multiplier: 1.35 }
     ],
 
     // Categorías afectadas por el multiplicador de altura
