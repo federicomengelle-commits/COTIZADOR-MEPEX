@@ -696,6 +696,65 @@ app.get('/api/quotations/:id', async (req, res) => {
     }
 });
 
+// Pobla las tablas normalizadas (cotizacion_espacios + cotizacion_items) a partir
+// del bloque `normalized` que arma el front. DEGRADACIÓN SEGURA: si algo falla
+// (tabla inexistente, error de insert), se loguea pero NO se propaga — la
+// cotización ya quedó guardada con full_state. Idempotente: borra lo previo
+// antes de insertar (sirve para re-guardados vía PUT).
+async function insertNormalized(cotizacionId, normalized) {
+    if (!normalized || (!normalized.items?.length && !normalized.espacios?.length)) return;
+    try {
+        // Limpiar lo previo de esta cotización (items primero por la FK a espacios)
+        await supabase.from('cotizacion_items').delete().eq('cotizacion_id', cotizacionId);
+        await supabase.from('cotizacion_espacios').delete().eq('cotizacion_id', cotizacionId);
+
+        // Espacios → insertar y mapear tempId del front → uuid real
+        const tempToReal = {};
+        if (normalized.espacios?.length) {
+            const espRows = normalized.espacios.map((e, i) => ({
+                cotizacion_id: cotizacionId,
+                nombre: e.nombre || 'Espacio',
+                superficie: e.superficie ?? null,
+                posicion: e.posicion ?? i
+            }));
+            const { data: insEsp, error: errEsp } = await supabase
+                .from('cotizacion_espacios').insert(espRows).select('id, posicion');
+            if (errEsp) throw errEsp;
+            normalized.espacios.forEach((e, i) => {
+                const match = insEsp.find(r => r.posicion === (e.posicion ?? i)) || insEsp[i];
+                if (match) tempToReal[e.tempId] = match.id;
+            });
+        }
+
+        // Items
+        if (normalized.items?.length) {
+            const itemRows = normalized.items.map((it, i) => ({
+                cotizacion_id: cotizacionId,
+                espacio_id: it.espacioTempId ? (tempToReal[it.espacioTempId] || null) : null,
+                catalogo_item_id: Number.isInteger(it.catalogoItemId) ? it.catalogoItemId : null,
+                nombre: it.nombre || '',
+                codigo: it.codigo || null,
+                unidad: it.unidad || null,
+                rubro: it.rubro || null,
+                categoria: it.categoria || null,
+                precio_unitario_base: it.precioUnitarioBase || 0,
+                precio_unitario_ajustado: it.precioUnitarioAjustado || 0,
+                cantidad: it.cantidad || 0,
+                subtotal_linea: it.subtotalLinea || 0,
+                height_multiplier_aplicado: it.heightMultAplicado ?? 1,
+                modifier_pct_aplicado: it.modifierPctAplicado ?? 0,
+                fee_pct_aplicado: it.feePctAplicado ?? 0,
+                posicion: it.posicion ?? i
+            }));
+            const { error: errItems } = await supabase.from('cotizacion_items').insert(itemRows);
+            if (errItems) throw errItems;
+        }
+        console.log(`   📐 Normalizado: ${normalized.espacios?.length || 0} espacios, ${normalized.items?.length || 0} items`);
+    } catch (e) {
+        console.warn('   ⚠️ No se pudieron poblar las tablas normalizadas (full_state intacto):', e.message);
+    }
+}
+
 // Crear cotización nueva
 app.post('/api/quotations', async (req, res) => {
     try {
@@ -733,6 +792,9 @@ app.post('/api/quotations', async (req, res) => {
 
         const quotation = formatQuotation(inserted);
         console.log(`✅ Quotation created: ${quotation.name} (${quotation.id})`);
+
+        // Poblar tablas normalizadas (no bloquea: si falla, full_state ya quedó)
+        await insertNormalized(inserted.id, data.normalized);
 
         res.json({ success: true, quotation });
 
@@ -779,6 +841,9 @@ app.put('/api/quotations/:id', async (req, res) => {
 
         const quotation = formatQuotation(updated);
         console.log(`✅ Quotation updated: ${quotation.name}`);
+
+        // Re-poblar tablas normalizadas si el front mandó el bloque (idempotente)
+        if (data.normalized !== undefined) await insertNormalized(id, data.normalized);
 
         res.json({ success: true, quotation });
 

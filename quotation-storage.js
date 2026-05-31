@@ -18,6 +18,9 @@ const QuotationStorage = {
         // Intentar guardar en Supabase via API
         try {
             if (typeof API !== 'undefined' && API.isConnected) {
+                // full_state no necesita duplicar el bloque normalized (va aparte
+                // a las tablas relacionales). Lo separamos para mantener el JSONB lean.
+                const { normalized, ...fullStateLean } = quotation;
                 const apiData = {
                     cotNumber: quotation.cotNumber,
                     type: quotation.type,
@@ -31,7 +34,8 @@ const QuotationStorage = {
                     tax: quotation.totals.tax,
                     total: quotation.totals.total,
                     date: quotation.date,
-                    fullState: quotation
+                    fullState: fullStateLean,
+                    normalized: normalized
                 };
 
                 const saved = await API.saveQuotation(apiData);
@@ -180,6 +184,58 @@ const QuotationStorage = {
             .filter(Boolean);
     },
 
+    // Construye las filas normalizadas (cotizacion_espacios + cotizacion_items)
+    // que el server inserta en las tablas relacionales. El pricing por línea se
+    // calcula con Pricing (fuente única), congelando el precio al momento de guardar.
+    _buildNormalized(params, isMultiSpace) {
+        const heightAffected = (typeof DATABASE !== 'undefined' && DATABASE.heightAffectedCategories)
+            || ['infrastructure', 'lighting'];
+        const ctx = Pricing.contextFromLiveParams(params, heightAffected);
+        const feePct = params.includeFee ? Math.round((params.feePercentage || 0) * 100) : 0;
+        const modPct = params.modifierPercentage || 0;
+
+        const espacios = [];
+        const items = [];
+        let pos = 0;
+
+        const pushItem = (slug, qty, espacioTempId) => {
+            const item = DB.getItemById(slug);
+            if (!item || qty <= 0) return;
+            const base = Pricing.parsePrice(item.price);
+            const hMult = heightAffected.includes(item.category) ? ctx.heightMultiplier : 1;
+            const adjusted = Pricing.loadedUnitPrice(base, item.category, ctx);
+            items.push({
+                espacioTempId: espacioTempId || null,
+                catalogoItemId: item.sourceId != null ? parseInt(item.sourceId, 10) : null,
+                nombre: item.name,
+                codigo: item.code || null,
+                unidad: item.unit || null,
+                rubro: item.originalRubro || null,
+                categoria: item.originalCategory || null,
+                precioUnitarioBase: base,
+                precioUnitarioAjustado: adjusted,
+                cantidad: qty,
+                subtotalLinea: adjusted * qty,
+                heightMultAplicado: hMult,
+                modifierPctAplicado: modPct,
+                feePctAplicado: feePct,
+                posicion: pos++
+            });
+        };
+
+        if (isMultiSpace) {
+            (params.spaces || []).forEach((space, si) => {
+                const tempId = space.id || ('sp_' + si);
+                espacios.push({ tempId, nombre: space.name, superficie: space.surface || null, posicion: si });
+                Object.entries(space.items || {}).forEach(([slug, data]) => pushItem(slug, data.quantity, tempId));
+            });
+        } else {
+            Object.entries(State.selectedItems).forEach(([slug, data]) => pushItem(slug, data.quantity, null));
+        }
+
+        return { espacios, items };
+    },
+
     // Recolectar estado completo de la cotización actual
     _collectCurrentState(cotNumber) {
         const params = State.generalParams;
@@ -243,6 +299,7 @@ const QuotationStorage = {
             },
             items,
             spaces,
+            normalized: this._buildNormalized(params, isMultiSpace),
             totals: {
                 subtotal: this._parseCurrencyFromDOM('subtotal-display'),
                 tax: this._parseCurrencyFromDOM('tax-display'),
