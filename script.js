@@ -3203,7 +3203,7 @@ const Render = {
         }
 
         // Colores MEPEX (dark theme)
-        const cyanColor = [0, 180, 213];
+        const cyanColor = [0, 229, 255];   // #00E5FF — unificado con --color-primary de la app
         const orangeColor = [243, 122, 31];
         const pageBg = [26, 26, 26];       // #1a1a1a
         const surfaceBg = [35, 35, 35];     // #232323
@@ -3224,6 +3224,14 @@ const Render = {
             // Thin cyan line at top of continuation pages
             doc.setFillColor(...cyanColor);
             doc.rect(0, 0, pageWidth, 2, 'F');
+        };
+
+        // Keep-with-next: salta de página si no entran `needed` mm desde yPos.
+        // Reemplaza los umbrales mágicos (pageHeight - 70/60/55) que dejaban
+        // títulos huérfanos al pie. bottomSafe deja lugar para el footer fijo.
+        const bottomSafe = pageHeight - 45;
+        const ensureSpace = (needed) => {
+            if (yPos + needed > bottomSafe) { addDarkPage(); yPos = 25; }
         };
 
         // Helper: get height label
@@ -3256,11 +3264,12 @@ const Render = {
             });
         };
 
-        // ── Load logo images (dimensiones acotadas al tamaño de display en el PDF) ──
-        // logo_full: se muestra a 50×7mm → ~300×42px a 150dpi
-        // mepex_iso: se muestra a 10×10mm → ~60×60px a 150dpi
-        const logoFullData = await loadImageAsDataURL('assets/logo_full.png', 300, 50);
-        const isoData = await loadImageAsDataURL('assets/mepex_iso.png', 80, 80);
+        // ── Load logo images (resolución pensada para impresión a 300dpi) ──
+        // logo_full: se muestra a 50×7mm → ~590×83px a 300dpi (cap 600×100)
+        // mepex_iso: se muestra a 10×10mm → ~118×118px a 300dpi (cap 240×240)
+        // Los assets fuente ya son alta resolución; el cap solo evita un PNG enorme embebido.
+        const logoFullData = await loadImageAsDataURL('assets/logo_full.png', 600, 100);
+        const isoData = await loadImageAsDataURL('assets/mepex_iso.png', 240, 240);
 
         // ========================================
         // PAGE 1 - BACKGROUND
@@ -3454,7 +3463,7 @@ const Render = {
                     const isInfrastructure = cat.id === 'infrastructure';
                     let catTotal = 0;
 
-                    if (yPos > pageHeight - 70) { addDarkPage(); yPos = 25; }
+                    ensureSpace(26); // header del rubro + primeras líneas, juntos
 
                     // Header del rubro
                     doc.setFont('helvetica', 'bold');
@@ -3481,7 +3490,7 @@ const Render = {
                         doc.setFont('helvetica', 'normal');
                         doc.setTextColor(...lightGray);
                         groupedItems[cat.id].forEach(item => {
-                            if (yPos > pageHeight - 60) { addDarkPage(); yPos = 25; }
+                            ensureSpace(10);
                             doc.text(`${item.quantity} - ${item.name}`, margin + 5, yPos);
                             yPos += 5;
                         });
@@ -3511,7 +3520,7 @@ const Render = {
 
             params.spaces.forEach((space, spaceIndex) => {
                 // ── Encabezado del espacio ──
-                if (yPos > pageHeight - 70) { addDarkPage(); yPos = 25; }
+                ensureSpace(30); // cabecera del espacio + primer rubro + primer ítem
 
                 doc.setFillColor(40, 40, 40);
                 doc.roundedRect(margin, yPos - 1, contentWidth, 9, 2, 2, 'F');
@@ -3545,7 +3554,7 @@ const Render = {
 
                 DB.getCategories().forEach(cat => {
                     if (spaceGrouped[cat.id] && spaceGrouped[cat.id].length > 0) {
-                        if (yPos > pageHeight - 60) { addDarkPage(); yPos = 25; }
+                        ensureSpace(18); // header del rubro + primer ítem, juntos
 
                         const catIcon = categoryIcons[cat.id] || '>>';
                         doc.setFont('helvetica', 'bold');
@@ -3560,7 +3569,7 @@ const Render = {
                         doc.setTextColor(...lightGray);
 
                         spaceGrouped[cat.id].forEach(item => {
-                            if (yPos > pageHeight - 60) { addDarkPage(); yPos = 25; }
+                            ensureSpace(10);
                             const itemTotal = item.price * item.quantity;
                             spaceTotal += itemTotal;
 
@@ -3576,7 +3585,7 @@ const Render = {
                 });
 
                 // Subtotal del espacio
-                if (yPos > pageHeight - 50) { addDarkPage(); yPos = 25; }
+                ensureSpace(14); // línea de subtotal del espacio
                 doc.setDrawColor(60, 60, 60);
                 doc.setLineWidth(0.3);
                 doc.line(margin + 3, yPos, pageWidth - margin, yPos);
@@ -3607,10 +3616,7 @@ const Render = {
         // ========================================
         yPos += 8;
 
-        if (yPos > pageHeight - 55) {
-            addDarkPage();
-            yPos = 25;
-        }
+        ensureSpace(34); // caja de total (26mm) sin pisar el footer
 
         // Caja de total (con desglose)
         doc.setFillColor(...cyanColor);
