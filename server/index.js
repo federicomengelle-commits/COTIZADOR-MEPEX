@@ -879,6 +879,87 @@ app.delete('/api/quotations/:id', async (req, res) => {
 });
 
 // =============================================
+// IA — generación de texto con Claude (Haiku)
+// =============================================
+// Toda llamada al LLM vive acá, en el backend: la API key va en server/.env
+// (mismo patrón que la service key de Supabase). El front NUNCA ve la key.
+// Requiere Node 18+ (usa fetch global). Modelo por defecto: Claude Haiku 4.5.
+const AI_MODEL = process.env.ANTHROPIC_MODEL || 'claude-haiku-4-5';
+const AI_ENABLED = !!process.env.ANTHROPIC_API_KEY;
+console.log(AI_ENABLED ? `🤖 IA habilitada (${AI_MODEL})` : '🤖 IA deshabilitada (falta ANTHROPIC_API_KEY en server/.env)');
+
+async function callClaude({ system, user, maxTokens = 600 }) {
+    if (!AI_ENABLED) {
+        const err = new Error('IA no configurada: falta ANTHROPIC_API_KEY en server/.env');
+        err.code = 'NO_KEY';
+        throw err;
+    }
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+            'x-api-key': process.env.ANTHROPIC_API_KEY,
+            'anthropic-version': '2023-06-01',
+            'content-type': 'application/json'
+        },
+        body: JSON.stringify({
+            model: AI_MODEL,
+            max_tokens: maxTokens,
+            system,
+            messages: [{ role: 'user', content: user }]
+        })
+    });
+    if (!resp.ok) {
+        const detail = await resp.text().catch(() => '');
+        throw new Error(`Anthropic API ${resp.status}: ${detail.slice(0, 300)}`);
+    }
+    const data = await resp.json();
+    return (data?.content || []).map(b => b.text || '').join('').trim();
+}
+
+// Estado de la IA — el front lo consulta para mostrar/ocultar features de IA
+app.get('/api/ai/status', (req, res) => {
+    res.json({ enabled: AI_ENABLED, model: AI_ENABLED ? AI_MODEL : null });
+});
+
+// Sanata comercial: descripción breve de la propuesta para el PDF
+app.post('/api/ai/sanata', async (req, res) => {
+    try {
+        const ctx = req.body || {};
+        const system = 'Sos redactor comercial de MEPEX, empresa argentina de montaje y equipamiento para stands y exposiciones. Escribís en español rioplatense, tono comercial profesional y cálido. Devolvés UN SOLO párrafo de 70 a 130 palabras, sin viñetas, sin títulos, sin precios ni números de presupuesto. Describís la propuesta de forma atractiva, destacando el valor y la presencia de marca. No inventes datos que no estén en el contexto.';
+        const user = `Generá la descripción comercial para esta propuesta de stand/expo:\n${JSON.stringify(ctx, null, 2)}`;
+        const text = await callClaude({ system, user, maxTokens: 400 });
+        res.json({ success: true, text });
+    } catch (error) {
+        const status = error.code === 'NO_KEY' ? 503 : 502;
+        console.error('❌ IA sanata:', error.message);
+        res.status(status).json({ success: false, error: error.message });
+    }
+});
+
+// Brief → cotización: extrae params + ítems del catálogo a partir de un brief (Fase 3)
+app.post('/api/ai/brief', async (req, res) => {
+    try {
+        const { brief, catalog } = req.body || {};
+        if (!brief) return res.status(400).json({ success: false, error: 'Falta el brief' });
+        const system = 'Sos un asistente de cotización de MEPEX. A partir de un brief de reunión y un catálogo de ítems, devolvés EXCLUSIVAMENTE un JSON válido (sin texto extra) con esta forma: {"params":{"tipo":"stand|expo|alquiler","superficie":number,"standType":"centro|esquina|peninsula|isla","altura":"standard|media|plus|extra|maxima"},"items":[{"id":"<id del catalogo>","cantidad":number,"confianza":0a1}],"notas":"string"}. Elegí SOLO ids que existan en el catálogo provisto. Si dudás de un ítem, incluilo igual con confianza baja (<0.5). No inventes ids ni cantidades absurdas.';
+        const user = `CATÁLOGO (id · nombre · rubro · unidad):\n${(catalog || []).map(i => `${i.id} · ${i.name} · ${i.rubro || i.category || ''} · ${i.unit || ''}`).join('\n')}\n\nBRIEF:\n${brief}`;
+        const text = await callClaude({ system, user, maxTokens: 1800 });
+        let parsed = null;
+        try {
+            const match = text.match(/\{[\s\S]*\}/);
+            parsed = JSON.parse(match ? match[0] : text);
+        } catch (e) {
+            return res.status(502).json({ success: false, error: 'La IA no devolvió JSON válido', raw: text });
+        }
+        res.json({ success: true, ...parsed });
+    } catch (error) {
+        const status = error.code === 'NO_KEY' ? 503 : 502;
+        console.error('❌ IA brief:', error.message);
+        res.status(status).json({ success: false, error: error.message });
+    }
+});
+
+// =============================================
 // START SERVER
 // =============================================
 app.listen(PORT, () => {
