@@ -58,29 +58,8 @@ app.use(express.static(path.join(__dirname, '..')));
 // PRECIO: el cotizador usa `precio_alquiler` (lo que muestra la "Lista de Precios"
 // del módulo Costos de LOBBY), NO `precio_cliente`. precio_cliente quedó como
 // columna legacy casi vacía (8/226). El precio canónico de venta es precio_alquiler.
-
-// ── Resolver de RUBRO del cotizador ───────────────────────────────────────
-// El cotizador agrupa por 6 keys internos. NO tocamos `categoria` en la tabla
-// compartida (la usa LOBBY) → mapeamos del lado del cotizador. Prioridad:
-//   1) si `categoria` ya es uno de los 6 keys → se respeta (no rompe lo existente)
-//   2) si no, se infiere por palabras clave en categoria/rubro/nombre
-//   3) fallback 'moreservices' → así ningún ítem cotizable desaparece
-const CATEGORY_KEYS = ['flooring', 'infrastructure', 'lighting', 'equipment', 'marketing', 'moreservices'];
-const CATEGORY_RULES = [
-    { key: 'flooring',       re: /(piso|alfombr|tarima|moqueta|deck|flotante)/i },
-    { key: 'lighting',       re: /(ilumin|\bluz\b|luces|spot|\bled\b|reflector|dicroic|proyector|backlight)/i },
-    { key: 'infrastructure', re: /(panel|estructura|octexa|pared|tabique|m[oó]dul|frente|dep[oó]sito|altillo|cenefa|columna|truss)/i },
-    { key: 'marketing',      re: /(gr[aá]fic|vinilo|cartel|impres|lona|banner|t[oó]tem|branding|se[ñn]al|render|dise[ñn])/i },
-    { key: 'equipment',      re: /(mobil|mostrador|vitrina|banqueta|silla|mesa|exhibidor|\btv\b|pantalla|heladera|dispenser|electro|mueble|sill[oó]n|sof[aá]|perchero|cesto)/i },
-];
-function resolveCategoryKey(categoria, rubro, nombre) {
-    const cat = String(categoria || '').toLowerCase().trim();
-    if (CATEGORY_KEYS.includes(cat)) return cat;
-    const hay = `${categoria || ''} ${rubro || ''} ${nombre || ''}`;
-    for (const r of CATEGORY_RULES) { if (r.re.test(hay)) return r.key; }
-    return 'moreservices';
-}
-
+// El grouping rubro→key vive en el FRONT (api.js convertToLocalFormat); acá pasamos
+// los valores crudos (rubro/categoria) tal cual para que el front los mapee.
 function formatCatalogItem(row) {
     return {
         id: String(row.id),
@@ -89,8 +68,7 @@ function formatCatalogItem(row) {
         code: row.codigo || '',
         description: row.descripcion || '',
         rubro: row.rubro || '',
-        category: resolveCategoryKey(row.categoria, row.rubro, row.nombre),
-        originalCategoria: row.categoria || '',
+        category: row.categoria || '',
         unit: row.unidad || null,
         // Redondeo a pesos enteros: precio_alquiler viene con decimales del costeo
         // de LOBBY (ej. 25273.8) que son artefacto del margen, no plata real. La

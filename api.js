@@ -165,20 +165,17 @@ const API = {
     convertToLocalFormat(apiItem) {
         // Mapear RUBRO (categoría principal) a categoría local
         // NOTA: 'infrastructure' y 'lighting' son afectados por el multiplicador de altura
+        // Keys normalizados (minúscula, sin acentos) → robusto a variaciones de la DB
         const rubroMap = {
-            // Pisos
-            'Pisos': 'flooring',
-            // Infraestructura (afectado por altura)
-            'Infraestructura': 'infrastructure',
-            // Iluminación (afectado por altura)
-            'Iluminación': 'lighting',
-            // Equipamiento
-            'Equipamiento': 'equipment',
-            // Marketing y servicios
-            'Marketing': 'marketing',
-            // Más servicios
-            'Más servicios': 'moreservices'
+            'pisos': 'flooring',
+            'infraestructura': 'infrastructure',   // afectado por altura
+            'iluminacion': 'lighting',             // afectado por altura
+            'equipamiento': 'equipment',
+            'marketing': 'marketing',
+            'marketing y servicios': 'marketing',
+            'mas servicios': 'moreservices'
         };
+        const normRubro = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
 
         // Mapear Categoría (subcategoría) a subcategoría local
         // Solo para equipment y marketing que tienen subcategorías
@@ -193,12 +190,22 @@ const API = {
             'Limpieza': 'services'
         };
 
-        // Obtener rubro (categoría principal)
-        const rubro = apiItem.rubro || 'Equipamiento';
-        const categoria = apiItem.category || null;  // subcategoría
+        // Obtener rubro (categoría principal) y subcategoría real
+        const rubro = apiItem.rubro || '';
+        const categoria = apiItem.category || null;  // subcategoría real (Alfombramiento, etc.)
 
-        // Determinar categoría local usando RUBRO
-        const localCategory = rubroMap[rubro] || 'equipment';
+        // Categoría local desde el RUBRO (normalizado). Si no matchea, inferir por
+        // palabras clave en rubro/categoria/nombre; fallback 'moreservices'.
+        let localCategory = rubroMap[normRubro(rubro)];
+        if (!localCategory) {
+            const hay = normRubro(`${rubro} ${categoria || ''} ${apiItem.name || ''}`);
+            if (/piso|alfombr|tarima|moqueta/.test(hay)) localCategory = 'flooring';
+            else if (/ilumin|luz|luces|spot|led|reflector|electric|artefacto|dicroic/.test(hay)) localCategory = 'lighting';
+            else if (/octexa|panel|estructura|infraestr|tabique|truss|cenefa/.test(hay)) localCategory = 'infrastructure';
+            else if (/grafic|vinilo|cartel|impres|lona|banner|marketing|branding/.test(hay)) localCategory = 'marketing';
+            else if (/mobil|mostrador|vitrina|\btv\b|pantalla|audiovisual|tablero|mueble|silla|mesa|banqueta|heladera/.test(hay)) localCategory = 'equipment';
+            else localCategory = 'moreservices';
+        }
 
         // Determinar subcategoría (solo si aplica)
         let localSubcategory = null;
