@@ -79,6 +79,20 @@ const API = {
         return await this.request('/health');
     },
 
+    // =============================================
+    // IA (Claude vía backend) — feature-flag por ANTHROPIC_API_KEY
+    // =============================================
+    async aiStatus() {
+        try { return await this.request('/ai/status'); }
+        catch { return { enabled: false }; }
+    },
+    async aiSanata(ctx) {
+        return await this.request('/ai/sanata', { method: 'POST', body: JSON.stringify(ctx) });
+    },
+    async aiBrief(brief, catalog) {
+        return await this.request('/ai/brief', { method: 'POST', body: JSON.stringify({ brief, catalog }) });
+    },
+
     // Obtener catálogo completo
     async getCatalog(forceRefresh = false) {
         // Usar cache si existe y no forzamos refresh

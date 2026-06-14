@@ -1784,6 +1784,22 @@ const Render = {
         });
     },
 
+    // Medidor de "calor" de la propuesta: FRÍA → TIBIA → CALIENTE según
+    // cuántos ítems tiene cargados. Gamificación anti-olvidos (Fase 1).
+    _updateHeat(count) {
+        const el = document.getElementById('heat-meter');
+        if (!el) return;
+        el.hidden = count === 0;
+        let pct, col, txt;
+        if (count < 4) { pct = 28; col = '#6AA0FF'; txt = 'FRÍA'; }
+        else if (count < 8) { pct = 55; col = 'var(--color-secondary)'; txt = 'TIBIA'; }
+        else { pct = 92; col = '#FF4D4D'; txt = 'CALIENTE'; }
+        const fill = el.querySelector('.heat-fill');
+        const state = el.querySelector('.heat-state');
+        if (fill) { fill.style.width = pct + '%'; fill.style.background = col; }
+        if (state) { state.textContent = txt; state.style.color = col; }
+    },
+
     // Renderiza un grupo de items en un contenedor con lógica de favoritos
     _renderItemGroup(items, container, displayName) {
         const favorites = items.filter(i => Favorites.isFavorite(i));
@@ -2685,6 +2701,12 @@ const Render = {
 
         // Mantener el acordeón del centro sincronizado (conteo/subtotal/estado por rubro)
         this._refreshAccordionMeta();
+
+        // Medidor de calor: cantidad de ítems cargados en la cotización actual
+        const heatCount = isMultiSpace
+            ? (params.spaces || []).reduce((n, s) => n + Object.values(s.items).filter(d => d.quantity > 0).length, 0)
+            : Object.values(State.selectedItems).filter(d => d.quantity > 0).length;
+        this._updateHeat(heatCount);
     },
 
     // =============================================
@@ -3474,6 +3496,48 @@ const Render = {
         doc.text('P R O P U E S T A   D E   C O T I Z A C I Ó N', pageWidth / 2, yPos, { align: 'center' });
 
         yPos += 10;
+
+        // ── Sanata comercial (IA, opcional) ──
+        // Si la IA está habilitada en el backend, genera un párrafo comercial y lo
+        // dibuja entre el título y los rubros. Si falla o está off, se omite sin romper.
+        if (typeof API !== 'undefined' && API.isConnected) {
+            try {
+                const rubrosNombres = {};
+                const collectNames = (entries) => entries.forEach(([id, d]) => {
+                    if (d.quantity <= 0) return;
+                    const it = DB.getItemById(id);
+                    if (it) (rubrosNombres[it.category] = rubrosNombres[it.category] || []).push(it.name);
+                });
+                if (!isMultiSpace) {
+                    collectNames(Object.entries(State.selectedItems));
+                } else {
+                    (params.spaces || []).forEach(sp => collectNames(Object.entries(sp.items)));
+                }
+                const sanataResp = await API.aiSanata({
+                    cliente, evento,
+                    tipo: qType,
+                    superficie: qType === 'stand' ? params.metraje : undefined,
+                    altura: qType === 'stand' ? heightLabel : undefined,
+                    tipoStand: qType === 'stand' ? tipoStand : undefined,
+                    rubros: rubrosNombres
+                });
+                const sanata = ((sanataResp && sanataResp.text) || '').trim();
+                if (sanata) {
+                    const sanataLines = doc.splitTextToSize(sanata, contentWidth - 6);
+                    ensureSpace(8 + sanataLines.length * 4.6);
+                    doc.setFillColor(...cyanColor);
+                    doc.rect(margin, yPos - 3, 1.2, sanataLines.length * 4.6 + 4, 'F');
+                    doc.setFont('helvetica', 'italic');
+                    doc.setFontSize(8.5);
+                    doc.setTextColor(...lightGray);
+                    sanataLines.forEach(line => { doc.text(line, margin + 5, yPos); yPos += 4.6; });
+                    yPos += 5;
+                    doc.setFont('helvetica', 'normal');
+                }
+            } catch (e) {
+                console.warn('Sanata IA omitida:', e.message);
+            }
+        }
 
         // ========================================
         // Mapa de iconos de texto para PDF
