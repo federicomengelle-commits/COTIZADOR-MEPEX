@@ -784,6 +784,22 @@ h4 {
     margin-top: 8px;
 }
 
+/* Franja ÚNICA de sugerencias al pie del centro (no dentro de cada rubro) */
+.global-ghosts {
+    margin: 18px 0 4px;
+    padding: 13px 14px;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.global-ghosts:empty {
+    display: none;
+}
+
 .rubro-ghosts:empty {
     display: none;
 }

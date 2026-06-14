@@ -1731,9 +1731,11 @@ const Render = {
                 const items = DB.getItemsByCategory(cat.id);
                 this._renderItemGroup(items, container, cat.name);
             }
-            // Contenedor de sugerencias fantasma (se llena en _renderGhosts)
-            section.insertAdjacentHTML('beforeend', `<div class="rubro-ghosts" id="ghosts-${cat.id}"></div>`);
         });
+
+        // Franja ÚNICA de sugerencias, ABAJO de todos los rubros (no dentro de cada uno,
+        // así nunca caen en el rubro equivocado). Se llena en _renderGhosts.
+        mainContainer.insertAdjacentHTML('beforeend', '<div class="global-ghosts" id="global-ghosts"></div>');
 
         this.attachItemListeners();
         this.reapplySearchFilter();
@@ -1832,31 +1834,29 @@ const Render = {
     },
 
     _renderGhosts() {
+        const cont = document.getElementById('global-ghosts');
+        if (!cont) return;
+        // Junta complementos (de rubros afines) de TODOS los rubros activos, con dedup
+        // global, y los muestra en UNA sola franja al pie — cada uno con su rubro de origen.
+        const seen = new Set();
+        const sugs = [];
         DB.getCategories().forEach(cat => {
-            const cont = document.getElementById(`ghosts-${cat.id}`);
-            if (!cont) return;
-            // Solo sugerir si el rubro está "activo" (tiene al menos 1 ítem)
-            if (this._categoryStats(cat.id).count === 0) { cont.innerHTML = ''; return; }
-            const targets = this._GHOST_AFFINITY[cat.id] || [];
-            const seen = new Set();
-            const sugs = [];
-            for (const tcat of targets) {
+            if (this._categoryStats(cat.id).count === 0) return;
+            for (const tcat of (this._GHOST_AFFINITY[cat.id] || [])) {
                 for (const it of DB.getItemsByCategory(tcat)) {
                     if (State.getItemQuantity(it.id) > 0 || seen.has(it.id)) continue;
                     seen.add(it.id);
                     sugs.push({ it, from: DATABASE.categories[tcat]?.name || tcat });
-                    if (sugs.length >= 2) break;
                 }
-                if (sugs.length >= 2) break;
             }
-            if (sugs.length === 0) { cont.innerHTML = ''; return; }
-            cont.innerHTML = `<div class="ghost-label"><span class="ghost-spark">✦</span> Sugerencias para tu stand</div>` +
-                sugs.map(s => `
-                    <div class="ghost-row">
-                        <span class="ghost-name">${s.it.name} <small>· ${s.from}</small></span>
-                        <button class="btn-add ghost-add" data-action="add" data-id="${s.it.id}">+ Sumar</button>
-                    </div>`).join('');
         });
+        if (sugs.length === 0) { cont.innerHTML = ''; return; }
+        cont.innerHTML = `<div class="ghost-label"><span class="ghost-spark">✦</span> Sugerencias para tu stand</div>` +
+            sugs.slice(0, 4).map(s => `
+                <div class="ghost-row">
+                    <span class="ghost-name">${s.it.name} <small>· ${s.from}</small></span>
+                    <button class="btn-add ghost-add" data-action="add" data-id="${s.it.id}">+ Sumar</button>
+                </div>`).join('');
     },
 
     // Renderiza un grupo de items en un contenedor con lógica de favoritos
@@ -3312,7 +3312,7 @@ const Render = {
         const qType = params.quotationType || 'stand';
         const pageWidth = 210;
         const pageHeight = 297;
-        const margin = 20;
+        const margin = 14;
         const contentWidth = pageWidth - (margin * 2);
 
         // Número de cotización: SOLO desde la API (contador atómico en la DB).
@@ -3363,7 +3363,7 @@ const Render = {
         // Keep-with-next: salta de página si no entran `needed` mm desde yPos.
         // Reemplaza los umbrales mágicos (pageHeight - 70/60/55) que dejaban
         // títulos huérfanos al pie. bottomSafe deja lugar para el footer fijo.
-        const bottomSafe = pageHeight - 45;
+        const bottomSafe = pageHeight - 39;
         const ensureSpace = (needed) => {
             if (yPos + needed > bottomSafe) { addDarkPage(); yPos = 25; }
         };
@@ -3680,7 +3680,7 @@ const Render = {
 
                     subtotalLoaded += catTotal;
 
-                    yPos += 5;
+                    yPos += 9; // más aire entre rubros
                 }
             });
 
@@ -3790,13 +3790,13 @@ const Render = {
         // ========================================
         // TOTAL (destacado)
         // ========================================
-        yPos += 8;
+        yPos += 5;
 
-        ensureSpace(34); // caja de total (26mm) sin pisar el footer
+        ensureSpace(26); // caja de total — keep-with-next, evita hoja huérfana del footer
 
         // Caja de total (con desglose)
         doc.setFillColor(...cyanColor);
-        doc.roundedRect(margin, yPos, contentWidth, 26, 3, 3, 'F');
+        doc.roundedRect(margin, yPos, contentWidth, 22, 3, 3, 'F');
 
         doc.setFontSize(11);
         doc.setFont('helvetica', 'bold');
@@ -3811,12 +3811,12 @@ const Render = {
         doc.setFont('helvetica', 'normal');
         doc.setTextColor(255, 255, 255, 180);
         const breakdownText = `Subtotal $${Math.round(adjustedSubtotal).toLocaleString('es-AR')} + IVA (21%) $${Math.round(tax).toLocaleString('es-AR')}`;
-        doc.text(breakdownText, pageWidth - margin - 8, yPos + 16, { align: 'right' });
+        doc.text(breakdownText, pageWidth - margin - 8, yPos + 15, { align: 'right' });
 
         // ========================================
         // PIE DE PÁGINA
         // ========================================
-        const footerY = pageHeight - 38;
+        const footerY = pageHeight - 30;
 
         // Línea separadora
         doc.setDrawColor(...cyanColor);
