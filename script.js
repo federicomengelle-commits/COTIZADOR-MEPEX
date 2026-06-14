@@ -1213,6 +1213,22 @@ const Render = {
         document.getElementById('btn-export')?.addEventListener('click', () => this.handleExport());
         document.getElementById('btn-preview')?.addEventListener('click', () => this.handlePreview());
         document.getElementById('btn-export-csv')?.addEventListener('click', () => this.handleExportCSV());
+
+        // Colapsar/expandir la barra izquierda (desktop) — persiste en localStorage
+        const navCollapseBtn = document.getElementById('btn-nav-collapse');
+        if (navCollapseBtn) {
+            const applyCollapse = (c) => {
+                document.querySelector('.app-container')?.classList.toggle('nav-collapsed', c);
+                navCollapseBtn.textContent = c ? '»' : '«';
+                navCollapseBtn.title = c ? 'Expandir menú' : 'Colapsar menú';
+            };
+            applyCollapse(localStorage.getItem('mepex_nav_collapsed') === '1');
+            navCollapseBtn.addEventListener('click', () => {
+                const c = !document.querySelector('.app-container')?.classList.contains('nav-collapsed');
+                try { localStorage.setItem('mepex_nav_collapsed', c ? '1' : '0'); } catch { /* silent */ }
+                applyCollapse(c);
+            });
+        }
         document.getElementById('btn-load-quotation')?.addEventListener('click', () => {
             if (typeof QuotationUI !== 'undefined') QuotationUI.openModal();
         });
@@ -1571,7 +1587,7 @@ const Render = {
 
         const paramsLink = document.createElement('a');
         paramsLink.className = 'nav-link active';
-        paramsLink.textContent = '⚙️ Parámetros';
+        paramsLink.innerHTML = '<span class="nav-ico">⚙️</span><span class="nav-text">Parámetros</span>';
         paramsLink.href = '#general-params';
         paramsLink.onclick = (e) => {
             e.preventDefault();
@@ -1590,7 +1606,7 @@ const Render = {
 
         const savedLink = document.createElement('a');
         savedLink.className = 'nav-link';
-        savedLink.innerHTML = '📁 Cotizaciones';
+        savedLink.innerHTML = '<span class="nav-ico">📁</span><span class="nav-text">Cotizaciones</span>';
         savedLink.href = '#';
         savedLink.onclick = (e) => {
             e.preventDefault();
@@ -1618,7 +1634,7 @@ const Render = {
             const link = document.createElement('a');
             link.className = 'nav-link';
             link.dataset.catId = cat.id;
-            link.innerHTML = `${cat.icon} ${cat.name} <span class="nav-badge" id="nav-badge-${cat.id}" style="display:none">0</span>`;
+            link.innerHTML = `<span class="nav-ico">${cat.icon}</span><span class="nav-text">${cat.name}</span> <span class="nav-badge" id="nav-badge-${cat.id}" style="display:none">0</span>`;
             link.href = `#cat-${cat.id}`;
             link.onclick = (e) => {
                 e.preventDefault();
@@ -1639,7 +1655,7 @@ const Render = {
         const adminLink = document.createElement('a');
         adminLink.className = 'nav-link nav-admin';
         adminLink.id = 'btn-admin';
-        adminLink.innerHTML = '📚 Catálogo';
+        adminLink.innerHTML = '<span class="nav-ico">📚</span><span class="nav-text">Catálogo</span>';
         adminLink.href = '#admin-panel';
         adminLink.onclick = (e) => {
             e.preventDefault();
@@ -3321,8 +3337,8 @@ const Render = {
         }
 
         // Colores MEPEX (dark theme)
-        const cyanColor = [0, 229, 255];   // #00E5FF — unificado con --color-primary de la app
-        const orangeColor = [243, 122, 31];
+        const cyanColor = [0, 169, 193];   // #00A9C1 — unificado con --color-primary de la app
+        const orangeColor = [242, 141, 21];
         const pageBg = [26, 26, 26];       // #1a1a1a
         const surfaceBg = [35, 35, 35];     // #232323
         const white = [255, 255, 255];
