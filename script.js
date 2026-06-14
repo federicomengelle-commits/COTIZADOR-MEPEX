@@ -1715,12 +1715,15 @@ const Render = {
                 const items = DB.getItemsByCategory(cat.id);
                 this._renderItemGroup(items, container, cat.name);
             }
+            // Contenedor de sugerencias fantasma (se llena en _renderGhosts)
+            section.insertAdjacentHTML('beforeend', `<div class="rubro-ghosts" id="ghosts-${cat.id}"></div>`);
         });
 
         this.attachItemListeners();
         this.reapplySearchFilter();
         this._rescanScrollSpy();
         this._enhanceAccordion();
+        this._renderGhosts();
     },
 
     // ── Acordeón por rubro (Fase 1) ────────────────────────────────
@@ -1800,8 +1803,54 @@ const Render = {
         if (state) { state.textContent = txt; state.style.color = col; }
     },
 
+    // Sugerencias fantasma (Fase 4 — v1 por reglas). Para cada rubro que YA tiene
+    // algo cargado, propone hasta 2 ítems no cargados de rubros afines (cross-sell).
+    // Pensado para enchufar IA después: reemplazar el cuerpo por una llamada al backend.
+    _GHOST_AFFINITY: {
+        flooring: ['infrastructure', 'lighting'],
+        infrastructure: ['lighting', 'equipment'],
+        lighting: ['equipment', 'marketing'],
+        equipment: ['marketing', 'moreservices'],
+        marketing: ['moreservices', 'equipment'],
+        moreservices: ['equipment', 'lighting']
+    },
+
+    _renderGhosts() {
+        DB.getCategories().forEach(cat => {
+            const cont = document.getElementById(`ghosts-${cat.id}`);
+            if (!cont) return;
+            // Solo sugerir si el rubro está "activo" (tiene al menos 1 ítem)
+            if (this._categoryStats(cat.id).count === 0) { cont.innerHTML = ''; return; }
+            const targets = this._GHOST_AFFINITY[cat.id] || [];
+            const seen = new Set();
+            const sugs = [];
+            for (const tcat of targets) {
+                for (const it of DB.getItemsByCategory(tcat)) {
+                    if (State.getItemQuantity(it.id) > 0 || seen.has(it.id)) continue;
+                    seen.add(it.id);
+                    sugs.push({ it, from: DATABASE.categories[tcat]?.name || tcat });
+                    if (sugs.length >= 2) break;
+                }
+                if (sugs.length >= 2) break;
+            }
+            if (sugs.length === 0) { cont.innerHTML = ''; return; }
+            cont.innerHTML = `<div class="ghost-label"><span class="ghost-spark">✦</span> Sugerencias para tu stand</div>` +
+                sugs.map(s => `
+                    <div class="ghost-row">
+                        <span class="ghost-name">${s.it.name} <small>· ${s.from}</small></span>
+                        <button class="btn-add ghost-add" data-action="add" data-id="${s.it.id}">+ Sumar</button>
+                    </div>`).join('');
+        });
+    },
+
     // Renderiza un grupo de items en un contenedor con lógica de favoritos
     _renderItemGroup(items, container, displayName) {
+        // Label del picker (los items no cargados quedan debajo via CSS order)
+        const label = document.createElement('div');
+        label.className = 'rubro-add-label';
+        label.textContent = `Agregar a ${displayName}`;
+        container.appendChild(label);
+
         const favorites = items.filter(i => Favorites.isFavorite(i));
         const nonFavorites = items.filter(i => !Favorites.isFavorite(i));
 
@@ -1847,58 +1896,35 @@ const Render = {
 
         const currentQty = State.getItemQuantity(item.id);
         const isSelected = currentQty > 0;
-
-        let controlsHtml = '';
-        let autoCalcInfo = '';
-
-        if (item.autoCalculate && isSelected) {
-            autoCalcInfo = `<span class="auto-calc-badge" title="Calculado automáticamente">AUTO</span>`;
-        }
-
-        if (item.type === 'counter') {
-            controlsHtml = `
-                <div class="counter-box">
-                    <button class="btn-count" data-action="dec" data-id="${item.id}">−</button>
-                    <input type="number" class="count-input" data-id="${item.id}" value="${currentQty}" min="0" step="1">
-                    <button class="btn-count" data-action="inc" data-id="${item.id}">+</button>
-                </div>
-            `;
-        } else {
-            controlsHtml = `
-                <label class="item-checkbox">
-                    <input type="checkbox" data-action="check" data-id="${item.id}" ${isSelected ? 'checked' : ''}>
-                    <span class="checkmark"></span>
-                </label>
-            `;
-        }
-
         const isFav = Favorites.isFavorite(item);
         const favTitle = isFav ? 'Quitar de favoritos' : 'Marcar como favorito';
+        const unit = this._normalizeUnit(item.unit);
+        const basePrice = this._parsePrice(item.price);
 
+        // Fila estilo receta: modo "agregar" (botón + Agregar) cuando no está cargado,
+        // modo "renglón" (stepper + total + quitar) cuando sí. El swap lo hace el CSS
+        // según la clase .selected (que mantiene updateAll), sin re-render.
         card.innerHTML = `
-            <button class="item-fav-btn ${isFav ? 'is-fav' : ''}" data-action="fav" data-id="${item.id}" title="${favTitle}" aria-label="${favTitle}">
-                ${isFav ? '★' : '☆'}
-            </button>
+            <button class="item-fav-btn ${isFav ? 'is-fav' : ''}" data-action="fav" data-id="${item.id}" title="${favTitle}" aria-label="${favTitle}">${isFav ? '★' : '☆'}</button>
             <div class="item-info">
                 <div class="item-header">
                     <span class="item-name">${item.name}</span>
-                    ${autoCalcInfo}
+                    ${item.autoCalculate ? '<span class="auto-calc-badge" title="Cantidad calculada automáticamente">AUTO</span>' : ''}
                 </div>
-                <div class="item-description">${item.description}</div>
-                <div class="item-price-row">
-                    <span class="item-price">$${Math.round(item.price).toLocaleString('es-AR')}</span>
-                    <span class="item-unit">/ ${item.unit}</span>
-                </div>
+                <span class="item-price">$${Math.round(basePrice).toLocaleString('es-AR')}${unit ? ` <small>/ ${unit}</small>` : ''}</span>
             </div>
             <div class="item-controls">
-                ${controlsHtml}
-            </div>
-        `;
+                <button class="btn-add" data-action="add" data-id="${item.id}">+ Agregar</button>
+                <div class="item-stepper">
+                    <button class="btn-count" data-action="dec" data-id="${item.id}" aria-label="restar">−</button>
+                    <input type="number" class="count-input" data-id="${item.id}" value="${currentQty}" min="0" step="1">
+                    <button class="btn-count" data-action="inc" data-id="${item.id}" aria-label="sumar">+</button>
+                    <span class="item-line-total">${this._fmt(basePrice * (currentQty || 0))}</span>
+                    <button class="btn-del" data-action="del" data-id="${item.id}" title="Quitar" aria-label="Quitar">🗑</button>
+                </div>
+            </div>`;
 
-        if (isSelected) {
-            card.classList.add('selected');
-        }
-
+        if (isSelected) card.classList.add('selected');
         return card;
     },
 
@@ -1934,6 +1960,20 @@ const Render = {
                 if (action === 'inc') newQty++;
                 if (action === 'dec') newQty = Math.max(0, newQty - 1);
                 State.toggleItem(id, newQty);
+                return;
+            }
+
+            // Botón "+ Agregar" (picker) y "+ Sumar" (fantasma) → carga con cantidad auto
+            const addBtn = e.target.closest('.btn-add');
+            if (addBtn) {
+                State.toggleItem(addBtn.dataset.id);
+                return;
+            }
+
+            // Botón quitar (renglón cargado)
+            const delBtn = e.target.closest('.btn-del');
+            if (delBtn) {
+                State.toggleItem(delBtn.dataset.id, 0);
                 return;
             }
 
@@ -2046,25 +2086,15 @@ const Render = {
             el.checked = State.getItemQuantity(id) > 0;
         });
 
-        // Update card selection state
+        // Update card selection state + total por renglón
         document.querySelectorAll('.item-card').forEach(card => {
             const id = card.dataset.itemId;
-            const isSelected = State.getItemQuantity(id) > 0;
+            const qty = State.getItemQuantity(id);
+            const isSelected = qty > 0;
             card.classList.toggle('selected', isSelected);
-
-            // Update auto-calc badge
             const item = DB.getItemById(id);
-            const badge = card.querySelector('.auto-calc-badge');
-            if (item?.autoCalculate && isSelected && !badge) {
-                const header = card.querySelector('.item-header');
-                const newBadge = document.createElement('span');
-                newBadge.className = 'auto-calc-badge';
-                newBadge.title = 'Calculado automáticamente';
-                newBadge.textContent = 'AUTO';
-                header.appendChild(newBadge);
-            } else if (badge && !isSelected) {
-                badge.remove();
-            }
+            const totalEl = card.querySelector('.item-line-total');
+            if (item && totalEl) totalEl.textContent = this._fmt(this._parsePrice(item.price) * qty);
         });
 
         // Mantener visibles items no-favoritos seleccionados aunque el grupo esté colapsado
@@ -2074,6 +2104,7 @@ const Render = {
             card.classList.toggle('force-visible', isSelected);
         });
 
+        this._renderGhosts();
         this.updateNavBadges();
         this.updateSummary();
 
