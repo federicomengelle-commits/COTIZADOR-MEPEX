@@ -2455,7 +2455,8 @@ const Render = {
         const heightAffectedCategories = DATABASE.heightAffectedCategories || ['infrastructure', 'lighting'];
         const currentHeight = DATABASE.heightMultipliers.find(h => h.id === params.heightType);
         const heightLabel = currentHeight ? `${currentHeight.name} (${currentHeight.height})` : 'Estándar';
-        const modifierMultiplier = 1 + (params.modifierPercentage / 100);
+        // Factor de ajuste aditivo: modificador + fee, ambos sobre el subtotal (no encadenados)
+        const adjFactor = 1 + (params.modifierPercentage / 100) + (params.includeFee ? params.feePercentage : 0);
 
         // ──────────────────────────────
         // Calcular subtotales paralelos para desglose visual
@@ -2645,9 +2646,8 @@ const Render = {
                         spaceBase += lineBase;
                         spaceConAltura += lineBase * heightMult;
 
-                        // Monto mostrado: incluye altura + modifier + fee (consistente con PDF)
-                        let shownTotal = lineBase * heightMult * modifierMultiplier;
-                        if (params.includeFee) shownTotal *= (1 + params.feePercentage);
+                        // Monto mostrado: altura + ajuste (modificador + fee sobre el subtotal)
+                        const shownTotal = Math.round(lineBase * heightMult * adjFactor);
 
                         summaryHTML += `
                             <div class="summary-item">
@@ -2657,9 +2657,8 @@ const Render = {
                     });
                 }
 
-                // Subtotal del espacio con todos los ajustes aplicados
-                let spaceSubtotal = spaceConAltura * modifierMultiplier;
-                if (params.includeFee) spaceSubtotal *= (1 + params.feePercentage);
+                // Subtotal del espacio: altura + ajuste (modificador + fee sobre el subtotal)
+                const spaceSubtotal = Math.round(spaceConAltura * adjFactor);
 
                 summaryHTML += `
                         <div class="summary-space-subtotal">
@@ -2739,7 +2738,7 @@ const Render = {
         }
 
         const subtotalFinal = subConFee;
-        const tax = subtotalFinal * 0.21;
+        const tax = Math.round(subtotalFinal * 0.21);
         const total = subtotalFinal + tax;
 
         subtotalEl.textContent = `$${Math.round(subtotalFinal).toLocaleString('es-AR')}`;
