@@ -1720,6 +1720,68 @@ const Render = {
         this.attachItemListeners();
         this.reapplySearchFilter();
         this._rescanScrollSpy();
+        this._enhanceAccordion();
+    },
+
+    // ── Acordeón por rubro (Fase 1) ────────────────────────────────
+    // Hace colapsable cada .category-section y le agrega al título un
+    // chevron + meta (conteo y subtotal). El estado verde "has-items"
+    // marca el rubro que ya tiene ítems cargados. El colapso se preserva
+    // entre re-renders vía this._collapsedCats.
+    _categoryStats(catId) {
+        const items = DB.getItemsByCategory(catId);
+        let count = 0, subtotal = 0;
+        items.forEach(it => {
+            const q = State.getItemQuantity(it.id) || 0;
+            if (q > 0) { count++; subtotal += this._parsePrice(it.price) * q; }
+        });
+        return { count, subtotal };
+    },
+
+    _catMetaHtml(count, subtotal) {
+        return count > 0
+            ? `<span class="cat-count">${count} ${count === 1 ? 'ítem' : 'ítems'}</span><span class="cat-sub">$${Math.round(subtotal).toLocaleString('es-AR')}</span>`
+            : `<span class="cat-count cat-count-empty">vacío</span>`;
+    },
+
+    _enhanceAccordion() {
+        if (!this._collapsedCats) this._collapsedCats = new Set();
+        document.querySelectorAll('#items-container .category-section').forEach(section => {
+            const catId = section.id.replace(/^cat-/, '');
+            const title = section.querySelector('.category-title');
+            if (!title || title.dataset.acc) return;
+            title.dataset.acc = '1';
+
+            const chev = document.createElement('span');
+            chev.className = 'cat-chevron';
+            chev.textContent = '▾';
+            title.prepend(chev);
+
+            const { count, subtotal } = this._categoryStats(catId);
+            const meta = document.createElement('span');
+            meta.className = 'cat-meta';
+            meta.innerHTML = this._catMetaHtml(count, subtotal);
+            title.appendChild(meta);
+
+            section.classList.toggle('has-items', count > 0);
+            if (this._collapsedCats.has(catId)) section.classList.add('collapsed');
+
+            title.addEventListener('click', () => {
+                section.classList.toggle('collapsed');
+                if (section.classList.contains('collapsed')) this._collapsedCats.add(catId);
+                else this._collapsedCats.delete(catId);
+            });
+        });
+    },
+
+    _refreshAccordionMeta() {
+        document.querySelectorAll('#items-container .category-section').forEach(section => {
+            const catId = section.id.replace(/^cat-/, '');
+            const { count, subtotal } = this._categoryStats(catId);
+            section.classList.toggle('has-items', count > 0);
+            const meta = section.querySelector('.cat-meta');
+            if (meta) meta.innerHTML = this._catMetaHtml(count, subtotal);
+        });
     },
 
     // Renderiza un grupo de items en un contenedor con lógica de favoritos
@@ -2620,6 +2682,9 @@ const Render = {
         subtotalEl.textContent = `$${Math.round(subtotalFinal).toLocaleString('es-AR')}`;
         taxEl.textContent = `$${Math.round(tax).toLocaleString('es-AR')}`;
         totalEl.textContent = `$${Math.round(total).toLocaleString('es-AR')}`;
+
+        // Mantener el acordeón del centro sincronizado (conteo/subtotal/estado por rubro)
+        this._refreshAccordionMeta();
     },
 
     // =============================================
