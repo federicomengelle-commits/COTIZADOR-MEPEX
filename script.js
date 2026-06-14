@@ -1093,12 +1093,9 @@ const State = {
             if (items[itemId]) {
                 delete items[itemId];
             } else {
-                const autoQty = item.autoCalculate ?
-                    DB.calculateAutoQuantity(itemId, this.generalParams.metraje,
-                        this.generalParams.standType, this.generalParams.heightType) : 1;
                 items[itemId] = {
-                    quantity: autoQty,
-                    autoCalc: item.autoCalculate
+                    quantity: this._autoQuantityFor(item),
+                    autoCalc: DB.isAreaItem(item) || !!item.autoCalculate
                 };
             }
         } else {
@@ -1121,21 +1118,33 @@ const State = {
         return items[itemId]?.quantity || 0;
     },
 
-    // Actualizar cantidades auto-calculadas
+    // Cantidad automática de un item:
+    //  · por m² (unidad m2) → la superficie del contexto (metraje en Stand, surface del espacio en Expo)
+    //  · autoCalculate clásico (perímetro/spots) → su fórmula
+    //  · nada → 1
+    _autoQuantityFor(item) {
+        if (DB.isAreaItem(item)) {
+            const space = this.getActiveSpace();
+            const surface = this.isMultiSpaceMode()
+                ? (parseFloat(space?.surface) || this.generalParams.metraje || 1)
+                : (this.generalParams.metraje || 1);
+            return Math.max(1, Math.round(surface));
+        }
+        if (item.autoCalculate) {
+            return DB.calculateAutoQuantity(item.id, this.generalParams.metraje,
+                this.generalParams.standType, this.generalParams.heightType) || 1;
+        }
+        return 1;
+    },
+
+    // Actualizar cantidades auto-calculadas (al cambiar superficie/tipo/altura)
     recalculateAutoItems() {
-        // Recalcular en el pool actual
         const items = this.getCurrentItems();
         Object.keys(items).forEach(itemId => {
             const selection = items[itemId];
-            if (selection.autoCalc) {
-                const newQty = DB.calculateAutoQuantity(
-                    itemId,
-                    this.generalParams.metraje,
-                    this.generalParams.standType,
-                    this.generalParams.heightType
-                );
-                selection.quantity = newQty;
-            }
+            if (!selection.autoCalc) return;
+            const item = DB.getItemById(itemId);
+            if (item) selection.quantity = this._autoQuantityFor(item);
         });
     },
 
@@ -1561,6 +1570,8 @@ const Render = {
                 const surfaceInput = infoContainer.querySelector('.space-surface-input');
                 surfaceInput?.addEventListener('input', (e) => {
                     activeSpace.surface = e.target.value;
+                    State.recalculateAutoItems(); // los ítems por m² siguen la superficie del espacio
+                    Render.updateAll();
                 });
                 infoContainer.querySelector('.btn-space-duplicate')?.addEventListener('click', () => {
                     const copy = State.duplicateSpace(activeSpace.id);
@@ -1925,7 +1936,7 @@ const Render = {
             <div class="item-info">
                 <div class="item-header">
                     <span class="item-name">${item.name}</span>
-                    ${item.autoCalculate ? '<span class="auto-calc-badge" title="Cantidad calculada automáticamente">AUTO</span>' : ''}
+                    ${(item.autoCalculate || DB.isAreaItem(item)) ? '<span class="auto-calc-badge" title="Cantidad calculada automáticamente por superficie">AUTO</span>' : ''}
                 </div>
                 <span class="item-price">$${Math.round(basePrice).toLocaleString('es-AR')}${unit ? ` <small>/ ${unit}</small>` : ''}</span>
             </div>

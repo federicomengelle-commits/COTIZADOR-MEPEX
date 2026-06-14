@@ -213,6 +213,12 @@ const DB = {
         return Object.values(DATABASE.categories).sort((a, b) => a.order - b.order);
     },
 
+    // ¿El item se cotiza por m²? (unidad m2/m²) → su cantidad sigue a la superficie
+    isAreaItem(item) {
+        if (!item || !item.unit) return false;
+        return String(item.unit).toLowerCase().replace('²', '2').trim() === 'm2';
+    },
+
     // Calcular cantidad auto para un item
     calculateAutoQuantity(itemId, metraje, standType, heightType) {
         const item = this.getItemById(itemId);
