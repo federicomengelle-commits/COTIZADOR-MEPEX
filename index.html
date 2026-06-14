@@ -418,10 +418,11 @@
     <script src="script.js"></script>
     <script src="brief.js"></script>
     <script>
-        // Reveal body after load
-        window.addEventListener('load', () => {
-            document.body.style.visibility = 'visible';
-        });
+        // Reveal body after load, con fallback: si un recurso externo (CDN/fuentes)
+        // cuelga, no dejamos la página invisible para siempre.
+        const revealBody = () => { document.body.style.visibility = 'visible'; };
+        window.addEventListener('load', revealBody);
+        setTimeout(revealBody, 3000);
     </script>
 </body>
 

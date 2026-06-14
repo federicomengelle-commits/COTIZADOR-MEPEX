@@ -6,7 +6,9 @@
 // Tablas existentes con column mapping
 // =============================================
 
-require('dotenv').config();
+// Cargar .env desde el directorio del server (no del cwd) → robusto ante pm2,
+// `node server/index.js` desde la raíz, o cualquier cwd.
+require('dotenv').config({ path: require('path').join(__dirname, '.env') });
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
