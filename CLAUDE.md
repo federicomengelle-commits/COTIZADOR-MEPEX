@@ -13,13 +13,17 @@ SPA vanilla JS para cotizar stands/expos/alquiler. Desplegada en `http://195.200
 - **Tablas propias del cotizador** (creadas en `server/migrations/`): `cotizacion_items` + `cotizacion_espacios` (normalización de lo cotizado, snapshot inmutable del precio por línea) y `cotizacion_numerador` (contador atómico por año + función `siguiente_numero_cotizacion`). Referencian `cotizaciones`/`catalogo_items` pero no las modifican.
 
 ### 🟥 Tres modos de cotización con reglas distintas
-- **Stand**: stand único, params (superficie, frente, profundidad, tipo, altura, modificador). Items en lista plana. Auto-cálculo de cantidades por perímetro/spots. **Único modo que usa multiplicador global de altura**.
-- **Expo**: multi-espacio, items por espacio, sin auto-cálculo, sin multiplicador.
-- **Alquiler**: igual estructura que Expo. Los 3 modos usan `precio_alquiler` como precio base (resuelto en C1.5; antes el código leía `precio_cliente`).
+- **Stand**: stand único, params (superficie, frente, profundidad, tipo, altura, modificador). **Único modo que usa multiplicador global de altura** (×1.0–1.35, solo Infra+Iluminación).
+- **Expo**: multi-espacio, items por espacio.
+- **Alquiler**: igual estructura que Expo. Los 3 modos usan `precio_alquiler` como precio base.
 
-**Pricing centralizado**: la fórmula vive en `pricing.js` (`Pricing.loadedUnitPrice` + `Pricing.compute`). Las 4 vistas (summary, PDF, CSV, Compare) la consumen. NO duplicar la fórmula — tocar `pricing.js`.
+**Auto-cálculo por m² (2026-06)**: items con `unidad = 'm2'/'m²'` toman cantidad = superficie automáticamente (metraje en Stand, surface del espacio en Expo) y se recalculan al cambiarla. Lógica: `DB.isAreaItem()` + `State._autoQuantityFor()`. (El auto-cálculo clásico perímetro/spots sigue para items con `autoCalculate`.)
 
-Cualquier cambio que toque pricing/render debe respetar y documentar la diferencia por modo. Antes de modificar un `if (type === 'stand')`, mapear todos los demás IFs por modo.
+**🟥 REGLA DE CÁLCULO (2026-06, premisa del dueño — NO romper)**: la fórmula vive SOLO en `pricing.js` (`adjustmentFactor` + `loadedUnitPrice` + `compute`); las 4 vistas (summary, PDF, CSV, Compare) la consumen. Modificador, descuentos, bonificaciones y fee se **SUMAN entre sí** y se aplican sobre el **subtotal** (factor único `1 + mod% + fee%`), NUNCA encadenados (un % sobre otro) ni sobre impuestos. La altura entra en el subtotal base. IVA 21% al final. **Redondeo al peso por línea** → el desglose por rubro/ítem cierra exacto contra el total. (Antes compoundeaba mod×fee e inflaba — corregido.)
+
+**🟥 Mapeo de rubro (2026-06)**: el cotizador agrupa por 6 keys (`flooring/infrastructure/lighting/equipment/marketing/moreservices`). El mapeo `rubro → key` vive en `api.js` `convertToLocalFormat` (normalizado sin acentos + fallback por palabras clave en rubro/categoria/nombre). **NO se toca `categoria` en la tabla compartida (la usa LOBBY).** Para sumar un ítem al cotizador alcanza con `es_cotizable=true` + `precio_alquiler>0` (campos solo-cotizador) → cae en su rubro solo.
+
+Cualquier cambio que toque pricing/render debe respetar la diferencia por modo.
 
 ### 🟥 Reglas operativas
 1. **No inventar schema.** Antes de proponer columnas nuevas, verificar con un SELECT real (la service_role key está allow-listada en `.claude/settings.local.json`).
@@ -30,19 +34,33 @@ Cualquier cambio que toque pricing/render debe respetar y documentar la diferenc
 6. **localStorage es para drafts y preferencias UI**, no para datos de negocio. Hay autosave del borrador en localStorage que es válido. Pero items, precios, cotizaciones guardadas siempre van a Supabase.
 
 ### 🟥 Featureset positivo que NO se rompe
-Favorites, Autosave, Templates, Compare, cotizaciones guardadas, número secuencial via API (`/api/cotizaciones/next-number`), Export PDF (jsPDF dark), Export CSV, autocomplete cliente/proyecto/evento, Mobile FAB+drawer, shortcuts Ctrl+K/?/Esc, help tips, Toast+Confirm propios.
+Favorites, Autosave, Templates, Compare, cotizaciones guardadas, número secuencial via API (`/api/cotizaciones/next-number`), Export PDF (jsPDF, tema dark turquesa), Export CSV, autocomplete cliente/proyecto/evento, Mobile FAB+drawer, shortcuts Ctrl+K/?/Esc, help tips, Toast+Confirm propios.
+
+**Nuevos (2026-06) — tampoco romper:**
+- **Centro tipo receta**: acordeón por rubro colapsable (`_enhanceAccordion`), filas con `+ Agregar` (picker) / renglón con stepper + total + quitar; renglones cargados arriba (CSS `order`). Delegación en `_initItemsDelegation`.
+- **Medidor de calor** (`_updateHeat`) en el resumen.
+- **Sugerencias fantasma**: franja ÚNICA al pie del centro (`#global-ghosts`, `_renderGhosts`), reglas de afinidad `_GHOST_AFFINITY`. Cada sugerencia etiqueta su rubro.
+- **Brief Express** (`brief.js`): modal de 10 preguntas → setea params (disparando los controles reales) + mapea ítems vía `/api/ai/brief`. Botón `#btn-brief`.
+- **Sanata IA** en el PDF (entre título y rubros, vía `/api/ai/sanata`; se omite si la IA está off).
+- **Nav izquierda colapsable** (`#btn-nav-collapse`, clase `.nav-collapsed`, persistida en localStorage).
+- **Marca MEPEX** aplicada (ver Stack › Marca).
 
 ### 🟥 Zonas frágiles — no tocar sin avisar
 - **Flujo de guardado a Supabase** (`api.js` saveQuotation + `server/index.js` `/api/quotations` POST). Recién arreglado, funciona.
 - **Numerador secuencial** (`POST /api/cotizaciones/next-number`) — usa la función SQL atómica `siguiente_numero_cotizacion(anio)` sobre la tabla `cotizacion_numerador` (contador por año). NO hay fallback localStorage: si la API cae, el front bloquea el export. Formato `COT-YYYY-NNNN`. Si cambiás el formato, actualizá la función SQL y el padStart del server.
 - **Upload de PDF a Storage** (`POST /api/quotations/:id/pdf`).
+- **`pricing.js`** — fuente única de la fórmula. Respetar la REGLA DE CÁLCULO de arriba (ajustes sobre el subtotal, sumados, IVA al final, redondeo por línea).
+- **Mapeo `rubro → key`** en `api.js convertToLocalFormat` — no romper el normalizado ni el fallback; NO mover el grouping a `categoria`.
+- **Endpoints IA** (`/api/ai/sanata`, `/api/ai/brief`, `/api/ai/status`) en `server/index.js` — degradan a 503 si falta `ANTHROPIC_API_KEY`; el front los consume defensivamente.
 
 ## Stack
 
 - Vanilla JS ES6+, SPA.
 - Supabase (PostgreSQL + Auth + Storage). URL: `selnevalaeykdrgycvdz.supabase.co`.
 - Express backend en `server/index.js` (port 3001 local, `/cotizador-api/api` en prod).
-- jsPDF para PDFs.
+- jsPDF para PDFs (tema dark, turquesa `#00A9C1`).
+- **IA**: Claude Haiku 4.5 vía backend (`/api/ai/sanata`, `/api/ai/brief`, `/api/ai/status`), usando `fetch` nativo (Node 18+). Key `ANTHROPIC_API_KEY` en `server/.env` (+ opcional `ANTHROPIC_MODEL`). Decisión: usar Claude (no OpenAI) por coherencia de stack; a bajo volumen el costo es centavos/mes. ChatGPT Plus/Claude Pro ≠ API.
+- **Marca MEPEX (2026-06)**: re-skin con el manual de LOBBY (`LOBBY-MEPEX/docs/MEPEX_BRAND.md`). Tokens en `style.css :root` (nombres viejos, valores nuevos): `--color-primary #00A9C1` (turquesa), `--color-secondary #F28D15`, `--color-bg #050505`, `--color-surface #111111`, `--color-success #00CC88`, texto `#E8E8E8/#888/#555`. Fuentes **Outfit** (UI) + **Space Mono** (montos/labels, `--font-mono`). Radios 4/6/10.
 - VPS Hostinger 195.200.1.250 (Ubuntu 24.04). El server corre con **pm2** como `cotizador-api`.
   - Deploy completo (frontend + backend): `cd ~/cotizador && git pull origin main && pm2 restart cotizador-api`
   - Solo frontend (HTML/CSS/JS de browser): alcanza con `git pull` + Ctrl+F5. Si tocás `server/`, el `pm2 restart` es obligatorio.
@@ -53,19 +71,23 @@ Favorites, Autosave, Templates, Compare, cotizaciones guardadas, número secuenc
 
 ```
 .
-├── index.html              — Single page, 3 columnas
-├── style.css               — Monolito CSS (~4590 líneas)
-├── script.js               — Monolito JS (~3895 líneas, sección Render entre 1200-3818)
-├── api.js                  — Cliente Supabase REST
-├── database.js             — Catálogo en memoria + cálculos auto (heightMultipliers, fees)
+├── index.html              — Single page, 3 columnas. Fuentes Outfit + Space Mono. Carga brief.js
+├── style.css               — Monolito CSS. Marca MEPEX en :root + centro receta + acordeón + brief
+├── script.js               — Monolito JS (sección Render). Centro receta, acordeón, calor, auto-calc, _renderGhosts
+├── api.js                  — Cliente REST + mapeo rubro→key (convertToLocalFormat) + métodos IA (aiSanata/aiBrief/aiStatus)
+├── database.js             — Catálogo en memoria + DB.isAreaItem + cálculos auto (heightMultipliers, fees)
+├── pricing.js              — FUENTE ÚNICA de la fórmula (adjustmentFactor + loadedUnitPrice + compute)
+├── brief.js                — Brief Express (10 preguntas → params + items vía IA, preview, aplicar)
 ├── autocomplete.js         — Inputs autocomplete
 ├── quotation-storage.js    — Persistencia de cotizaciones guardadas
 ├── quotation-ui.js         — UI del modal "Cargar cotización"
 ├── server/
-│   ├── index.js                — Backend Express
+│   ├── index.js                — Backend Express + endpoints IA (/api/ai/sanata|brief|status, callClaude)
+│   ├── .env.example            — Variables (Supabase + ANTHROPIC_API_KEY)
 │   ├── supabase-setup.sql      — Schema (mínimo, NO refleja toda la tabla)
 │   └── migrate-notion-to-supabase.js  — LEGACY (eliminar)
-├── .audit/                 — Docs de auditoría (lectura obligatoria si se trabaja en el refactor)
+├── HANDOFF.md              — Pendientes + decisiones (handoff entre sesiones)
+├── .audit/                 — Docs de auditoría (schema_dump.md = dump real de Supabase)
 └── .claude/settings.local.json  — Allowlist con service_role key (gitignored)
 ```
 
