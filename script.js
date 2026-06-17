@@ -3312,11 +3312,6 @@ const Render = {
 
     async exportPDF(options = {}) {
         const { jsPDF } = window.jspdf;
-        const doc = new jsPDF({
-            orientation: 'portrait',
-            unit: 'mm',
-            format: 'a4'
-        });
 
         const params = State.generalParams;
         const qType = params.quotationType || 'stand';
@@ -3324,6 +3319,18 @@ const Render = {
         const pageHeight = 297;
         const margin = 14;
         const contentWidth = pageWidth - (margin * 2);
+
+        // ── Datos render-independientes (se calculan UNA vez; renderDoc se redibuja
+        // a varias escalas para el achique automático, pero esto no cambia). ──
+        const today = new Date(); // fecha de emisión — usada en header y filename
+        const cliente = document.getElementById('input-cliente')?.value || 'No especificado';
+        const proyecto = document.getElementById('input-proyecto')?.value || '';
+        const evento = document.getElementById('input-evento')?.value || 'No especificado';
+        const eventoData = State.generalParams.eventoData;
+        const fechaEventoStr = formatEventDateRange(eventoData?.eventStartDate, eventoData?.eventEndDate);
+        const venue = eventoData?.venue || '';
+        const tipoStand = params.standType.charAt(0).toUpperCase() + params.standType.slice(1);
+        const isMultiSpace = State.isMultiSpaceMode();
 
         // Número de cotización: SOLO desde la API (contador atómico en la DB).
         // Sin fallback localStorage — generaba números fantasma que colisionaban
@@ -3355,28 +3362,10 @@ const Render = {
         const lightGray = [200, 200, 200];
         const mediumGray = [140, 140, 140];
 
-        // Helper: draw dark background on current page
-        const drawPageBg = () => {
-            doc.setFillColor(...pageBg);
-            doc.rect(0, 0, pageWidth, pageHeight, 'F');
-        };
-
-        // Helper: add new page with background
-        const addDarkPage = () => {
-            doc.addPage();
-            drawPageBg();
-            // Thin cyan line at top of continuation pages
-            doc.setFillColor(...cyanColor);
-            doc.rect(0, 0, pageWidth, 2, 'F');
-        };
-
-        // Keep-with-next: salta de página si no entran `needed` mm desde yPos.
-        // Reemplaza los umbrales mágicos (pageHeight - 70/60/55) que dejaban
-        // títulos huérfanos al pie. bottomSafe deja lugar para el footer fijo.
+        // Reserva para el footer fijo (la fórmula keep-with-next compara contra esto).
+        // Los helpers de página (drawPageBg/addDarkPage/ensureSpace) viven DENTRO de
+        // renderDoc porque dependen del `doc` y el `yPos` de cada pasada de render.
         const bottomSafe = pageHeight - 39;
-        const ensureSpace = (needed) => {
-            if (yPos + needed > bottomSafe) { addDarkPage(); yPos = 25; }
-        };
 
         // Helper: get height label
         const currentHeight = DATABASE.heightMultipliers.find(h => h.id === params.heightType);
@@ -3414,6 +3403,34 @@ const Render = {
         // Los assets fuente ya son alta resolución; el cap solo evita un PNG enorme embebido.
         const logoFullData = await loadImageAsDataURL('assets/logo_full.png', 600, 100);
         const isoData = await loadImageAsDataURL('assets/mepex_iso.png', 240, 240);
+
+        // Sanata IA: se pide UNA sola vez (cacheada) aunque el cuerpo se redibuje a
+        // varias escalas para el achique automático.
+        let _sanataText = '';
+        let _sanataDone = false;
+
+        // ── renderDoc(s): dibuja TODO el documento a una escala vertical `s` (1 = normal).
+        // G(n)=n*s comprime SOLO los avances/paddings del flujo del cuerpo (datos→rubros).
+        // Header, footer y caja de total quedan a tamaño fijo. Con s=1, G es identidad →
+        // el PDF es idéntico al de siempre (sin regresión). Devuelve cuántas páginas ocupó. ──
+        const renderDoc = async (s) => {
+            const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+            const G = (n) => n * s;
+            let yPos;
+
+            const drawPageBg = () => {
+                doc.setFillColor(...pageBg);
+                doc.rect(0, 0, pageWidth, pageHeight, 'F');
+            };
+            const addDarkPage = () => {
+                doc.addPage();
+                drawPageBg();
+                doc.setFillColor(...cyanColor);
+                doc.rect(0, 0, pageWidth, 2, 'F');
+            };
+            const ensureSpace = (needed) => {
+                if (yPos + needed > bottomSafe) { addDarkPage(); yPos = 25; }
+            };
 
         // ========================================
         // PAGE 1 - BACKGROUND
@@ -3456,7 +3473,6 @@ const Render = {
         doc.text(typeLabel, pageWidth - margin - badgeW + 6, 15.5);
 
         // Fecha de emisión (debajo del badge)
-        const today = new Date();
         const dateStr = today.toLocaleDateString('es-AR', {
             day: '2-digit', month: 'long', year: 'numeric'
         });
@@ -3473,16 +3489,8 @@ const Render = {
         // ========================================
         // INFORMACIÓN DEL PROYECTO
         // ========================================
-        let yPos = 35;
-
-        const cliente = document.getElementById('input-cliente')?.value || 'No especificado';
-        const proyecto = document.getElementById('input-proyecto')?.value || '';
-        const evento = document.getElementById('input-evento')?.value || 'No especificado';
-        const eventoData = State.generalParams.eventoData;
-        const fechaEventoStr = formatEventDateRange(eventoData?.eventStartDate, eventoData?.eventEndDate);
-        const venue = eventoData?.venue || '';
-        const tipoStand = params.standType.charAt(0).toUpperCase() + params.standType.slice(1);
-        const isMultiSpace = State.isMultiSpaceMode();
+        // Arranca la "zona de flujo" (yPos se declaró con let al tope de renderDoc).
+        yPos = 35;
 
         // Columna izquierda: cliente, proyecto (si existe), evento
         // Columna derecha: superficie/tipo/altura, fecha evento (si existe), lugar (si existe)
@@ -3495,7 +3503,7 @@ const Render = {
         if (venue) rightRows++;
 
         const dataRows = Math.max(leftRows, rightRows);
-        const boxHeight = 10 + (dataRows * 6) + 4; // título + filas + padding
+        const boxHeight = G(10 + (dataRows * 6) + 4); // título + filas + padding (escalado)
 
         doc.setFillColor(...surfaceBg);
         doc.roundedRect(margin, yPos, contentWidth, boxHeight, 3, 3, 'F');
@@ -3508,41 +3516,41 @@ const Render = {
         doc.setFontSize(8);
         doc.setFont('helvetica', 'bold');
         doc.setTextColor(...cyanColor);
-        doc.text('D A T O S   D E L   P R O Y E C T O', margin + 5, yPos + 6);
+        doc.text('D A T O S   D E L   P R O Y E C T O', margin + 5, yPos + G(6));
 
         doc.setFontSize(9);
         doc.setFont('helvetica', 'normal');
         doc.setTextColor(...lightGray);
 
         // Columna izquierda
-        let leftY = yPos + 13;
+        let leftY = yPos + G(13);
         doc.text(`Cliente: ${cliente}`, margin + 5, leftY);
         if (proyecto) {
-            leftY += 6;
+            leftY += G(6);
             doc.text(`Proyecto: ${proyecto}`, margin + 5, leftY);
         }
-        leftY += 6;
+        leftY += G(6);
         doc.text(`Evento: ${evento}`, margin + 5, leftY);
 
         // Columna derecha
-        let rightY = yPos + 13;
+        let rightY = yPos + G(13);
         if (qType === 'stand') {
             doc.text(`Superficie: ${params.metraje}m²`, margin + 90, rightY);
-            rightY += 6;
+            rightY += G(6);
             doc.text(`Tipo: ${tipoStand}  |  Altura: ${heightLabel}`, margin + 90, rightY);
         } else {
             doc.text(`Espacios: ${params.spaces.length}`, margin + 90, rightY);
         }
         if (fechaEventoStr) {
-            rightY += 6;
+            rightY += G(6);
             doc.text(`Fecha evento: ${fechaEventoStr}`, margin + 90, rightY);
         }
         if (venue) {
-            rightY += 6;
+            rightY += G(6);
             doc.text(`Lugar: ${venue}`, margin + 90, rightY);
         }
 
-        yPos += boxHeight + 8;
+        yPos += boxHeight + G(8);
 
         // ========================================
         // TÍTULO DE COTIZACIÓN
@@ -3552,12 +3560,13 @@ const Render = {
         doc.setTextColor(...white);
         doc.text('P R O P U E S T A   D E   C O T I Z A C I Ó N', pageWidth / 2, yPos, { align: 'center' });
 
-        yPos += 10;
+        yPos += G(10);
 
         // ── Sanata comercial (IA, opcional) ──
         // Si la IA está habilitada en el backend, genera un párrafo comercial y lo
         // dibuja entre el título y los rubros. Si falla o está off, se omite sin romper.
-        if (typeof API !== 'undefined' && API.isConnected) {
+        if (!_sanataDone && typeof API !== 'undefined' && API.isConnected) {
+            _sanataDone = true; // pedir la sanata UNA sola vez, no en cada re-render
             try {
                 const rubrosNombres = {};
                 const collectNames = (entries) => entries.forEach(([id, d]) => {
@@ -3578,22 +3587,22 @@ const Render = {
                     tipoStand: qType === 'stand' ? tipoStand : undefined,
                     rubros: rubrosNombres
                 });
-                const sanata = ((sanataResp && sanataResp.text) || '').trim();
-                if (sanata) {
-                    const sanataLines = doc.splitTextToSize(sanata, contentWidth - 6);
-                    ensureSpace(8 + sanataLines.length * 4.6);
-                    doc.setFillColor(...cyanColor);
-                    doc.rect(margin, yPos - 3, 1.2, sanataLines.length * 4.6 + 4, 'F');
-                    doc.setFont('helvetica', 'italic');
-                    doc.setFontSize(8.5);
-                    doc.setTextColor(...lightGray);
-                    sanataLines.forEach(line => { doc.text(line, margin + 5, yPos); yPos += 4.6; });
-                    yPos += 5;
-                    doc.setFont('helvetica', 'normal');
-                }
+                _sanataText = ((sanataResp && sanataResp.text) || '').trim();
             } catch (e) {
                 console.warn('Sanata IA omitida:', e.message);
             }
+        }
+        if (_sanataText) {
+            const sanataLines = doc.splitTextToSize(_sanataText, contentWidth - 6);
+            ensureSpace(G(8 + sanataLines.length * 4.6));
+            doc.setFillColor(...cyanColor);
+            doc.rect(margin, yPos - G(3), 1.2, sanataLines.length * G(4.6) + G(4), 'F');
+            doc.setFont('helvetica', 'italic');
+            doc.setFontSize(8.5);
+            doc.setTextColor(...lightGray);
+            sanataLines.forEach(line => { doc.text(line, margin + 5, yPos); yPos += G(4.6); });
+            yPos += G(5);
+            doc.setFont('helvetica', 'normal');
         }
 
         // ========================================
@@ -3649,7 +3658,7 @@ const Render = {
                     const isInfrastructure = cat.id === 'infrastructure';
                     let catTotal = 0;
 
-                    ensureSpace(26); // header del rubro + primeras líneas, juntos
+                    ensureSpace(G(26)); // header del rubro + primeras líneas, juntos
 
                     // Header del rubro
                     doc.setFont('helvetica', 'bold');
@@ -3657,8 +3666,8 @@ const Render = {
                     doc.text(cat.name.toUpperCase(), margin, yPos);
                     doc.setDrawColor(60, 60, 60);
                     doc.setLineWidth(0.3);
-                    doc.line(margin, yPos + 2, pageWidth - margin, yPos + 2);
-                    yPos += 7;
+                    doc.line(margin, yPos + G(2), pageWidth - margin, yPos + G(2));
+                    yPos += G(7);
 
                     // Stand = proyecto integral. En el PDF no enumeramos precios
                     // individuales: Infraestructura sale como línea OCTEXA y los demás
@@ -3667,18 +3676,18 @@ const Render = {
                         doc.setFont('helvetica', 'normal');
                         doc.setTextColor(...lightGray);
                         doc.text(`Superficie: ${params.metraje}m² — Altura: ${heightLabel}`, margin + 5, yPos);
-                        yPos += 5;
+                        yPos += G(5);
                         doc.setFont('helvetica', 'italic');
                         doc.setTextColor(...mediumGray);
                         doc.text('Construcción modular con sistema OCTEXA', margin + 5, yPos);
-                        yPos += 6;
+                        yPos += G(6);
                     } else {
                         doc.setFont('helvetica', 'normal');
                         doc.setTextColor(...lightGray);
                         groupedItems[cat.id].forEach(item => {
-                            ensureSpace(10);
+                            ensureSpace(G(10));
                             doc.text(`${item.quantity} - ${item.name}`, margin + 5, yPos);
-                            yPos += 5;
+                            yPos += G(5);
                         });
                     }
 
@@ -3690,7 +3699,7 @@ const Render = {
 
                     subtotalLoaded += catTotal;
 
-                    yPos += 9; // más aire entre rubros
+                    yPos += G(9); // más aire entre rubros
                 }
             });
 
@@ -3706,7 +3715,7 @@ const Render = {
 
             params.spaces.forEach((space, spaceIndex) => {
                 // ── Encabezado del espacio ──
-                ensureSpace(30); // cabecera del espacio + primer rubro + primer ítem
+                ensureSpace(G(30)); // cabecera del espacio + primer rubro + primer ítem
 
                 doc.setFillColor(40, 40, 40);
                 doc.roundedRect(margin, yPos - 1, contentWidth, 9, 2, 2, 'F');
@@ -3719,7 +3728,7 @@ const Render = {
                     doc.setTextColor(...mediumGray);
                     doc.text(`${space.surface}m²`, pageWidth - margin - 4, yPos + 5, { align: 'right' });
                 }
-                yPos += 13;
+                yPos += G(13);
                 doc.setFontSize(9);
 
                 let spaceTotal = 0;
@@ -3740,7 +3749,7 @@ const Render = {
 
                 DB.getCategories().forEach(cat => {
                     if (spaceGrouped[cat.id] && spaceGrouped[cat.id].length > 0) {
-                        ensureSpace(18); // header del rubro + primer ítem, juntos
+                        ensureSpace(G(18)); // header del rubro + primer ítem, juntos
 
                         const catIcon = categoryIcons[cat.id] || '>>';
                         doc.setFont('helvetica', 'bold');
@@ -3748,14 +3757,14 @@ const Render = {
                         doc.text(cat.name.toUpperCase(), margin + 3, yPos);
                         doc.setDrawColor(60, 60, 60);
                         doc.setLineWidth(0.2);
-                        doc.line(margin + 3, yPos + 2, pageWidth - margin, yPos + 2);
-                        yPos += 6;
+                        doc.line(margin + 3, yPos + G(2), pageWidth - margin, yPos + G(2));
+                        yPos += G(6);
 
                         doc.setFont('helvetica', 'normal');
                         doc.setTextColor(...lightGray);
 
                         spaceGrouped[cat.id].forEach(item => {
-                            ensureSpace(10);
+                            ensureSpace(G(10));
                             const itemTotal = item.price * item.quantity;
                             spaceTotal += itemTotal;
 
@@ -3763,25 +3772,25 @@ const Render = {
                             doc.text(formatItemLine(item), margin + 6, yPos);
                             doc.setTextColor(...white);
                             doc.text(`$${Math.round(itemTotal).toLocaleString('es-AR')}`, pageWidth - margin, yPos, { align: 'right' });
-                            yPos += 5;
+                            yPos += G(5);
                         });
 
-                        yPos += 2;
+                        yPos += G(2);
                     }
                 });
 
                 // Subtotal del espacio
-                ensureSpace(14); // línea de subtotal del espacio
+                ensureSpace(G(14)); // línea de subtotal del espacio
                 doc.setDrawColor(60, 60, 60);
                 doc.setLineWidth(0.3);
                 doc.line(margin + 3, yPos, pageWidth - margin, yPos);
-                yPos += 4;
+                yPos += G(4);
                 doc.setFont('helvetica', 'bold');
                 doc.setTextColor(...mediumGray);
                 doc.text(`Subtotal ${space.name}`, margin + 4, yPos);
                 doc.setTextColor(...cyanColor);
                 doc.text(`$${Math.round(spaceTotal).toLocaleString('es-AR')}`, pageWidth - margin, yPos, { align: 'right' });
-                yPos += 8;
+                yPos += G(8);
 
                 grandTotal += spaceTotal;
             });
@@ -3800,9 +3809,9 @@ const Render = {
         // ========================================
         // TOTAL (destacado)
         // ========================================
-        yPos += 5;
+        yPos += G(5);
 
-        ensureSpace(26); // caja de total — keep-with-next, evita hoja huérfana del footer
+        ensureSpace(26); // caja de total (RESERVA FIJA, sin escalar) — evita hoja huérfana del footer
 
         // Caja de total (con desglose)
         doc.setFillColor(...cyanColor);
@@ -3881,6 +3890,25 @@ const Render = {
         // Barra inferior decorativa — CELESTE
         doc.setFillColor(...cyanColor);
         doc.rect(0, pageHeight - 4, pageWidth, 4, 'F');
+
+            return { doc, pages: doc.getNumberOfPages(), scale: s };
+        };
+
+        // ── Achique automático: probamos de mayor a menor escala y nos quedamos con
+        // la MÁS GRANDE que entre en una sola hoja. Si ni la más comprimida entra
+        // (cotización genuinamente larga), usamos s=1 y dejamos las hojas necesarias. ──
+        const FIT_LADDER = [1, 0.94, 0.88, 0.82, 0.76, 0.72];
+        const _fitMemo = {};
+        const renderAt = async (s) => (_fitMemo[s] || (_fitMemo[s] = await renderDoc(s)));
+        let chosen = null;
+        for (const s of FIT_LADDER) {
+            const attempt = await renderAt(s);
+            if (attempt.pages <= 1) { chosen = attempt; break; }
+        }
+        if (!chosen) chosen = await renderAt(1);
+        this._lastPdfFit = { scale: chosen.scale, pages: chosen.pages };
+        if (chosen.scale !== 1) console.log(`📄 PDF comprimido a escala ${chosen.scale} para entrar en 1 hoja`);
+        const doc = chosen.doc;
 
         // ========================================
         // GUARDAR PDF
