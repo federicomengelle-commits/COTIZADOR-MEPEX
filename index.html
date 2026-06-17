@@ -337,6 +337,28 @@
                 <!-- Category sections generated via JS -->
             </div>
 
+            <!-- ========================================= -->
+            <!-- TEXTO DE LA PROPUESTA (editable, va al PDF) -->
+            <!-- ========================================= -->
+            <div class="section-divider"><span>Texto de la propuesta</span></div>
+            <section id="proposal-block" class="proposal-block">
+                <div class="proposal-head">
+                    <div class="proposal-head-text">
+                        <h3>Texto comercial de la propuesta</h3>
+                        <p>Aparece en el PDF, entre el título y los rubros. Generalo con IA a partir de los ítems y editalo a gusto.</p>
+                    </div>
+                    <button type="button" id="btn-generate-proposal" class="btn-generate-proposal">
+                        <span class="spark">✦</span> <span class="label">Generar con IA</span>
+                    </button>
+                </div>
+                <textarea id="proposal-text" class="proposal-textarea" rows="5" maxlength="1200"
+                    placeholder="Escribí el texto comercial, o tocá «Generar con IA» para que lo arme a partir de los ítems cargados. Editalo libremente."></textarea>
+                <div class="proposal-meta">
+                    <span id="proposal-count" class="proposal-count">0 palabras</span>
+                    <span class="proposal-hint">Si lo dejás vacío, se autogenera al exportar.</span>
+                </div>
+            </section>
+
             <footer class="app-footer">
                 <div class="footer-line"></div>
             </footer>

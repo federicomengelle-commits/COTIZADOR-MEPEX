@@ -260,6 +260,7 @@ const QuotationStorage = {
             cotNumber,
             date: new Date().toISOString().split('T')[0],
             type: qType,
+            proposalText: params.proposalText || '',
             params: {
                 client: {
                     id: params.clienteData?.id || null,

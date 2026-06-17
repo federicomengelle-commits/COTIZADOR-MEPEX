@@ -995,6 +995,7 @@ const State = {
         includeFee: false,
         feePercentage: 0.10,
         quotationType: 'stand',  // 'stand' | 'expo' | 'alquiler'
+        proposalText: '',        // texto comercial editable (va al PDF; se autogenera si queda vacío)
         // Expo/Alquiler: modelo de espacios
         spaces: [],              // [{ id, name, surface, items: {} }]
         activeSpaceId: null
@@ -1189,6 +1190,7 @@ const State = {
             includeFee: false,
             feePercentage: 0.10,
             quotationType: 'stand',
+            proposalText: '',
             spaces: [],
             activeSpaceId: null
         };
@@ -1216,6 +1218,7 @@ const Render = {
         this.renderAdminPanel();
         this.updateSummary();
         this._initScrollSpy();
+        this._initProposalBlock();
 
         // Bind global actions
         document.getElementById('btn-reset')?.addEventListener('click', () => this.handleReset());
@@ -2104,6 +2107,129 @@ const Render = {
     attachItemListeners() {
         // No-op: los listeners están delegados en _initItemsDelegation().
         // Mantengo el método por compatibilidad con llamadas existentes en renderItems().
+    },
+
+    // ── Texto de la propuesta (editable, va al PDF) ──────────────────
+    // Bloque en el centro tras los ítems: textarea + botón "Generar con IA".
+    // El texto vive en State.generalParams.proposalText (persiste con el borrador y
+    // la cotización). exportPDF lo usa tal cual; si queda vacío, autogenera.
+    _initProposalBlock() {
+        const ta = document.getElementById('proposal-text');
+        const btn = document.getElementById('btn-generate-proposal');
+        if (ta && !ta._wired) {
+            ta._wired = true;
+            ta.addEventListener('input', () => {
+                State.generalParams.proposalText = ta.value;
+                this._updateProposalCount();
+                if (typeof Autosave !== 'undefined') Autosave.schedule();
+            });
+        }
+        if (btn && !btn._wired) {
+            btn._wired = true;
+            btn.addEventListener('click', () => this.generateProposal());
+        }
+        this._refreshProposalUI();
+        this._reflectProposalAIState();
+    },
+
+    // Deshabilita el botón "Generar" si la IA no está disponible en el backend.
+    _reflectProposalAIState() {
+        const btn = document.getElementById('btn-generate-proposal');
+        if (!btn || typeof API === 'undefined' || !API.aiStatus) return;
+        API.aiStatus().then(s => {
+            const on = !!(s && s.enabled);
+            btn.disabled = !on;
+            btn.title = on
+                ? 'Generar el texto a partir de los ítems cargados'
+                : 'IA no disponible (falta ANTHROPIC_API_KEY en el server)';
+        }).catch(() => { });
+    },
+
+    _updateProposalCount() {
+        const ta = document.getElementById('proposal-text');
+        const el = document.getElementById('proposal-count');
+        if (!ta || !el) return;
+        const words = ta.value.trim() ? ta.value.trim().split(/\s+/).length : 0;
+        el.textContent = `${words} ${words === 1 ? 'palabra' : 'palabras'}`;
+    },
+
+    // Sincroniza el textarea desde State (init, reset, restore de borrador/cotización).
+    _refreshProposalUI() {
+        const ta = document.getElementById('proposal-text');
+        if (ta) ta.value = State.generalParams.proposalText || '';
+        this._updateProposalCount();
+    },
+
+    // Contexto para la IA: ítems CON cantidades + datos del proyecto. Lo comparten el
+    // botón "Generar" y el autogenerado del PDF (misma fuente → consistencia).
+    _buildSanataContext() {
+        const p = State.generalParams;
+        const qType = p.quotationType || 'stand';
+        const isMulti = State.isMultiSpaceMode();
+        const hd = DATABASE.heightMultipliers.find(h => h.id === p.heightType);
+        const heightLabel = hd ? `${hd.name} (${hd.height})` : 'Estándar';
+        const items = [];
+        const collect = (entries) => entries.forEach(([id, d]) => {
+            if (!d || d.quantity <= 0) return;
+            const it = DB.getItemById(id);
+            if (it) items.push({ nombre: it.name, cantidad: d.quantity, rubro: DATABASE.categories[it.category]?.name || it.category });
+        });
+        if (!isMulti) collect(Object.entries(State.selectedItems || {}));
+        else (p.spaces || []).forEach(sp => collect(Object.entries(sp.items || {})));
+        return {
+            cliente: document.getElementById('input-cliente')?.value || p.cliente || '',
+            evento: document.getElementById('input-evento')?.value || p.evento || '',
+            tipo: qType,
+            superficie: qType === 'stand' ? p.metraje : undefined,
+            altura: qType === 'stand' ? heightLabel : undefined,
+            tipoStand: qType === 'stand' && p.standType ? (p.standType.charAt(0).toUpperCase() + p.standType.slice(1)) : undefined,
+            espacios: isMulti ? (p.spaces || []).map(s => s.name) : undefined,
+            items
+        };
+    },
+
+    async generateProposal() {
+        const ta = document.getElementById('proposal-text');
+        const btn = document.getElementById('btn-generate-proposal');
+        if (!ta) return;
+        if (typeof API === 'undefined' || !API.isConnected) {
+            if (typeof Toast !== 'undefined') Toast.error('Sin conexión con el servidor.');
+            return;
+        }
+        const ctx = this._buildSanataContext();
+        if (!ctx.items.length) {
+            if (typeof Toast !== 'undefined') Toast.info('Cargá algún ítem primero para que el texto tenga de qué hablar.');
+            return;
+        }
+        if (ta.value.trim()) {
+            const ok = await Confirm.show({
+                title: 'Regenerar texto',
+                message: 'Esto reemplaza el texto actual por uno nuevo de la IA. ¿Continuar?',
+                confirmText: 'Sí, regenerar',
+                cancelText: 'Cancelar'
+            });
+            if (!ok) return;
+        }
+        const label = btn ? btn.querySelector('.label') : null;
+        const prevLabel = label ? label.textContent : '';
+        if (btn) btn.classList.add('loading');
+        if (label) label.textContent = 'Generando…';
+        try {
+            const resp = await API.aiSanata(ctx);
+            const text = ((resp && resp.text) || '').trim();
+            if (!text) throw new Error('La IA no devolvió texto');
+            ta.value = text;
+            State.generalParams.proposalText = text;
+            this._updateProposalCount();
+            if (typeof Autosave !== 'undefined') Autosave.schedule();
+            if (typeof Toast !== 'undefined') Toast.success('Texto generado — editalo a gusto');
+        } catch (e) {
+            console.error('Generar propuesta:', e);
+            if (typeof Toast !== 'undefined') Toast.error(/503|no configurada/i.test(e.message || '') ? 'IA no disponible en el server.' : 'No se pudo generar el texto.');
+        } finally {
+            if (btn) btn.classList.remove('loading');
+            if (label) label.textContent = prevLabel || 'Generar con IA';
+        }
     },
 
     // Scrollspy: auto-highlight del nav-link según qué sección está en viewport.
@@ -3122,6 +3248,9 @@ const Render = {
             btn.classList.toggle('active', btn.dataset.type === 'stand');
         });
         this.updateLayoutForType('stand');
+
+        // Texto de la propuesta: sincronizar el textarea con el State (reset o restore)
+        this._refreshProposalUI();
     },
 
     // =============================================
@@ -3631,31 +3760,19 @@ const Render = {
         // ── Sanata comercial (IA, opcional) ──
         // Si la IA está habilitada en el backend, genera un párrafo comercial y lo
         // dibuja entre el título y los rubros. Si falla o está off, se omite sin romper.
-        if (!_sanataDone && typeof API !== 'undefined' && API.isConnected) {
-            _sanataDone = true; // pedir la sanata UNA sola vez, no en cada re-render
-            try {
-                const rubrosNombres = {};
-                const collectNames = (entries) => entries.forEach(([id, d]) => {
-                    if (d.quantity <= 0) return;
-                    const it = DB.getItemById(id);
-                    if (it) (rubrosNombres[it.category] = rubrosNombres[it.category] || []).push(it.name);
-                });
-                if (!isMultiSpace) {
-                    collectNames(Object.entries(State.selectedItems));
-                } else {
-                    (params.spaces || []).forEach(sp => collectNames(Object.entries(sp.items)));
+        if (!_sanataDone) {
+            _sanataDone = true; // resolver el texto UNA sola vez, no en cada re-render por escala
+            const edited = (State.generalParams.proposalText || '').trim();
+            if (edited) {
+                _sanataText = edited; // el dueño escribió/generó el texto en el cotizador → se respeta tal cual
+            } else if (typeof API !== 'undefined' && API.isConnected) {
+                // Vacío → autogenerar con el MISMO contexto que el botón "Generar con IA"
+                try {
+                    const sanataResp = await API.aiSanata(this._buildSanataContext());
+                    _sanataText = ((sanataResp && sanataResp.text) || '').trim();
+                } catch (e) {
+                    console.warn('Sanata IA omitida:', e.message);
                 }
-                const sanataResp = await API.aiSanata({
-                    cliente, evento,
-                    tipo: qType,
-                    superficie: qType === 'stand' ? params.metraje : undefined,
-                    altura: qType === 'stand' ? heightLabel : undefined,
-                    tipoStand: qType === 'stand' ? tipoStand : undefined,
-                    rubros: rubrosNombres
-                });
-                _sanataText = ((sanataResp && sanataResp.text) || '').trim();
-            } catch (e) {
-                console.warn('Sanata IA omitida:', e.message);
             }
         }
         if (_sanataText) {

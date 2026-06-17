@@ -908,7 +908,7 @@ const AI_MODEL = process.env.ANTHROPIC_MODEL || 'claude-haiku-4-5';
 const AI_ENABLED = !!process.env.ANTHROPIC_API_KEY;
 console.log(AI_ENABLED ? `🤖 IA habilitada (${AI_MODEL})` : '🤖 IA deshabilitada (falta ANTHROPIC_API_KEY en server/.env)');
 
-async function callClaude({ system, user, maxTokens = 600 }) {
+async function callClaude({ system, user, maxTokens = 600, temperature }) {
     if (!AI_ENABLED) {
         const err = new Error('IA no configurada: falta ANTHROPIC_API_KEY en server/.env');
         err.code = 'NO_KEY';
@@ -924,6 +924,7 @@ async function callClaude({ system, user, maxTokens = 600 }) {
         body: JSON.stringify({
             model: AI_MODEL,
             max_tokens: maxTokens,
+            ...(temperature != null ? { temperature } : {}),
             system,
             messages: [{ role: 'user', content: user }]
         })
@@ -945,9 +946,13 @@ app.get('/api/ai/status', (req, res) => {
 app.post('/api/ai/sanata', async (req, res) => {
     try {
         const ctx = req.body || {};
-        const system = 'Sos redactor comercial de MEPEX, empresa argentina de montaje y equipamiento para stands y exposiciones. Escribís en español rioplatense, tono comercial profesional y cálido. Devolvés UN SOLO párrafo de 70 a 130 palabras, sin viñetas, sin títulos, sin precios ni números de presupuesto. Describís la propuesta de forma atractiva, destacando el valor y la presencia de marca. No inventes datos que no estén en el contexto.';
-        const user = `Generá la descripción comercial para esta propuesta de stand/expo:\n${JSON.stringify(ctx, null, 2)}`;
-        const text = await callClaude({ system, user, maxTokens: 400 });
+        const items = Array.isArray(ctx.items) ? ctx.items : [];
+        const itemsTxt = items.length
+            ? items.map(i => `- ${i.cantidad || 1}× ${i.nombre}${i.rubro ? ` (${i.rubro})` : ''}`).join('\n')
+            : '(todavía sin ítems cargados)';
+        const system = 'Sos redactor comercial de MEPEX, empresa argentina de montaje y equipamiento para stands y exposiciones. Escribís en español rioplatense, tono comercial profesional y cálido. Devolvés UN SOLO párrafo de 60 a 110 palabras, sin viñetas, sin títulos, sin precios ni números de presupuesto. Describís ESTA propuesta concreta apoyándote en los ítems que la componen: mencioná materiales/elementos clave y la experiencia que generan para el visitante (sin listarlos como inventario ni repetir cantidades). Destacás el valor y la presencia de marca para el cliente en su evento. NO inventes ítems ni datos que no estén en el contexto.';
+        const user = `Datos de la propuesta:\n- Cliente: ${ctx.cliente || 's/d'}\n- Evento: ${ctx.evento || 's/d'}\n- Tipo: ${ctx.tipo || 'stand'}${ctx.superficie ? `\n- Superficie: ${ctx.superficie} m²` : ''}${ctx.tipoStand ? `\n- Tipo de stand: ${ctx.tipoStand}` : ''}${ctx.altura ? `\n- Altura: ${ctx.altura}` : ''}${Array.isArray(ctx.espacios) && ctx.espacios.length ? `\n- Espacios: ${ctx.espacios.join(', ')}` : ''}\n\nÍtems que componen la propuesta:\n${itemsTxt}\n\nEscribí el párrafo comercial.`;
+        const text = await callClaude({ system, user, maxTokens: 400, temperature: 0.6 });
         res.json({ success: true, text });
     } catch (error) {
         const status = error.code === 'NO_KEY' ? 503 : 502;

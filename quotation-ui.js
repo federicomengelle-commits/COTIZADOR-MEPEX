@@ -245,6 +245,9 @@ const QuotationUI = {
         // Paso 1: Reset previo
         State.reset();
 
+        // Texto de la propuesta (no se trae a templates: puede referir a este cliente/evento)
+        State.generalParams.proposalText = clearClientData ? '' : (quotation.proposalText || '');
+
         // Paso 2: Restaurar generalParams (NO se restaura cotNumber)
         State.generalParams.quotationType = quotation.type;
         State.generalParams.metraje = p.surface;
@@ -326,6 +329,7 @@ const QuotationUI = {
         // Actualizar display de evento/lugar/fecha
         if (typeof Render !== 'undefined') {
             Render.updateEventInfo(clearClientData ? null : State.generalParams.eventoData);
+            Render._refreshProposalUI();
         }
 
         const metrajeInput = document.getElementById('input-metraje');
