@@ -1,72 +1,60 @@
-# HANDOFF — COTIZADOR-MEPEX (sesión 2026-06-14)
+# HANDOFF — COTIZADOR-MEPEX (sesión 2026-06-17)
 
 > Para retomar en un chat nuevo. Leer también `CLAUDE.md` (contexto durable) y, si se trabaja el refactor, `.audit/`.
 
 ## 📍 Estado
 
-- **Repo**: `github.com/federicomengelle-commits/cotizador-mepex` · branch **`main`** · último commit **`1379272`** (todo pusheado).
+- **Repo**: `github.com/federicomengelle-commits/cotizador-mepex` · branch **`main`** · último commit **`742d117`** (pusheado).
 - **Prod**: `http://195.200.1.250/cotizador/` · VPS `~/cotizador` · pm2 `cotizador-api`.
-- **Deploy**: `cd ~/cotizador && git pull origin main` + `pm2 restart cotizador-api` (el restart SOLO si se tocó `server/`; frontend solo = pull + Ctrl+Shift+R).
-- **IA**: Claude Haiku 4.5. La `ANTHROPIC_API_KEY` YA está cargada en `server/.env` y verificada (la sanata genera bien). ⚠️ Si se redeploya el server desde cero, esa key tiene que seguir en `server/.env`.
-- **Verificación local**: `node --check` sobre los `.js`; para ver la app, levantar el backend (`cd server && npm start` o `node server/index.js`) → sirve todo en `localhost:3001` (conecta a la Supabase real).
+- **Deploy**: `cd ~/cotizador && git pull origin main` + `pm2 restart cotizador-api` (el restart SOLO si se tocó `server/`; frontend solo = pull + Ctrl+Shift+R). ⚠️ **Esta sesión tocó `server/index.js` (endpoint nuevo) → el `pm2 restart` es obligatorio al deployar.**
+- **IA**: Claude Haiku 4.5. La `ANTHROPIC_API_KEY` va en `server/.env`. En **prod** está cargada (sanata/brief/ghosts funcionan). ⚠️ En la copia **CLEAN local NO está** → la IA degrada a reglas/503 (es esperado; se verifica en prod).
+- **Verificación local**: `node --check` sobre los `.js`; para ver la app, levantar el backend (`cd server && npm start` o `node server/index.js`) → sirve todo en `localhost:3001` (conecta a la Supabase real). Hay launch.json para preview (`cotizador-full`).
 
-## ✅ Hecho esta sesión (todo en `main`, verificado en preview)
+## ✅ Hecho esta sesión (todo en `main`, verificado headless)
 
 | Commit | Qué |
 |---|---|
-| `9e16eb4` | Acordeón por rubro colapsable + tokens de estado |
-| `8471fb7` | Endpoints IA en backend (`/api/ai/sanata\|brief\|status`, Claude Haiku) |
-| `2f73d67` | Sanata IA en el PDF + medidor de calor + cliente `API.ai*` |
-| `1db12b9` | **Brief Express** (`brief.js`): 10 preguntas → params + ítems vía IA |
-| `033a4e1` | server carga `.env` desde `__dirname` + fallback de visibility |
-| `f539a05` | **Centro estilo receta** completo (picker `+ Agregar` + renglones + fantasmas) |
-| `ceebc37` | **Re-skin marca MEPEX** (turquesa `#00A9C1`, Outfit + Space Mono) + nav colapsable |
-| `1d9d63f` | Sugerencias en franja única al pie + PDF más compacto |
-| `99b5f27` | **Pricing corregido**: ajustes sobre el subtotal, sumados, IVA al final, redondeo por línea |
-| `8c17a7c` | **Auto-cálculo por m²** (cantidad = superficie para `unidad='m2'`) |
-| `1379272` | **Mapeo `rubro → key` robusto** en `api.js` (sin tocar `categoria` de LOBBY) |
+| `ce1c391` | **UI #1**: parámetros agrupados en 3 bloques (identidad+modo / config stand / fee) separados por línea sutil + aire; "Tipo de Stand" en fila propia (descomprime dimensiones). Sin esconder/sacar controles. |
+| `265c2c5` | **PDF #2**: achique automático (scale-to-fit). `renderDoc(s)` con `G(n)=n*s` comprime solo el flujo del cuerpo; elige la mayor escala que entra en 1 hoja. `s=1` = idéntico al actual (anti-regresión). |
+| `742d117` | **Ghosts IA #3**: endpoint `POST /api/ai/ghosts` (Haiku, valida ids) + front que refina la franja con IA (debounce+cache, badge "IA", motivo) y cae a reglas si la IA está off/caída. |
+
+> Sesiones previas (contexto): acordeón por rubro, endpoints IA sanata/brief, brief express, re-skin marca MEPEX, pricing sobre subtotal, auto-cálculo m², mapeo rubro→key robusto.
 
 ## 🧠 Decisiones durables (no revertir sin avisar)
 
 1. **Pricing** (premisa del dueño): modificador, descuentos, bonificaciones y fee **se suman entre sí y van sobre el subtotal** (factor `1 + mod% + fee%`), nunca encadenados ni sobre impuestos. Altura en el subtotal base. IVA al final. Redondeo al peso por línea. Fuente única: `pricing.js`.
-2. **IA = Claude Haiku 4.5** (no OpenAI), por coherencia de stack; a bajo volumen el costo es centavos/mes. ChatGPT Plus / Claude Pro **no** dan API (se paga por token aparte).
-3. **Marca = manual de LOBBY** (`LOBBY-MEPEX/docs/MEPEX_BRAND.md`): turquesa `#00A9C1`, naranja `#F28D15`, verde `#00CC88`, fondo `#050505`, Outfit (UI) + Space Mono (montos).
-4. **Catálogo compartido**: NO tocar `categoria` (la usa LOBBY). El grouping vive en el front (`api.js convertToLocalFormat`, `rubro → key`). Para sumar un ítem al cotizador: `es_cotizable=true` + `precio_alquiler>0`. Para auto-cálculo por m²: `unidad='m2'`.
+2. **PDF scale-to-fit**: la fórmula `G(n)=n*s` comprime SOLO los avances/paddings del flujo (datos→rubros). Header, footer y **caja de total (reserva `ensureSpace(26)`)** quedan FIJOS. `s=1` ⇒ identidad ⇒ sin regresión. Ladder `[1, .94, .88, .82, .76, .72]`; piso 0.72 elegido para que el header de espacio (caja fija 9mm) no se solape con su avance `G(13)`.
+3. **IA = Claude Haiku 4.5** (no OpenAI). Sanata, brief y **ghosts** viven en el backend (key nunca en el front). Cada endpoint degrada a 503 si falta la key; el front los consume defensivamente.
+4. **Ghosts**: las reglas de afinidad (`_GHOST_AFFINITY`) son el render instantáneo y el **fallback**. La IA solo refina si está habilitada. Debounce 1.1s + cache por firma (ítems cargados + modo) para no spamear. El backend valida los ids contra el catálogo provisto (sin alucinaciones).
+5. **Catálogo compartido**: NO tocar `categoria` (la usa LOBBY). Grouping en el front (`api.js convertToLocalFormat`). Para sumar un ítem al cotizador: `es_cotizable=true` + `precio_alquiler>0`. Auto-cálculo m²: `unidad='m2'`.
 
 ## 🔜 PENDIENTES (en orden sugerido)
 
-1. **Simplificar la UI manual** — *sin esconder ni sacar botones* (premisa del dueño): mismos controles, pero más ordenado/agrupado/con aire. **No implementado** (era el próximo paso cuando se cortó).
-2. **PDF scale-to-fit** — el total + footer **todavía saltan a una 2ª hoja casi vacía** en algunos casos (el fix de márgenes lo redujo pero NO lo eliminó; el dueño confirmó que sigue pasando). Falta el "achique automático" (reducir fuente/interlínea para forzar una hoja).
-3. **Fase 4 — sugerencias fantasma con IA**: hoy son por reglas de afinidad cross-rubro (`_GHOST_AFFINITY` en `script.js`). Enchufarle el backend de IA.
-4. **Brief fino end-to-end**: ajustar el mapeo de ítems; rinde poco hasta que el catálogo crezca.
-5. **Fase 5 — avatar "Martín"**: vendedor IA que hace el ping-pong del brief. Idea futura.
-6. **Afinar mapeo `rubro → key`**: ya cubre Pisos/Infraestructura/Iluminación/Equipamiento/Más servicios. "Marketing" aún sin ítems en la DB.
+1. **Mirar con ojo humano lo que no pude verificar yo** (el sandbox de la IA no saca screenshots):
+   - **UI #1**: abrir `localhost:3001` y validar el agrupamiento/aire. Posible iteración: captions por grupo, más/menos aire, etc.
+   - **PDF #2**: exportar un caso *borderline* (ej. expo con varios espacios) y mirar que el achique no apriete feo (interlínea/mínimos). El conteo de hojas está verificado; el pixel no.
+2. **Ghosts IA — tope de candidatos**: hoy el front manda TODOS los ítems no cargados como candidatos. Con 9 ítems es trivial, pero cuando el catálogo crezca conviene capar (ej. top ~60 por afinidad) para acotar prompt/costo.
+3. **Brief fino end-to-end**: ajustar el mapeo de ítems; rinde poco hasta que el catálogo crezca.
+4. **Fase 5 — avatar "Martín"**: vendedor IA que hace el ping-pong del brief. Idea futura.
+5. **Cosmético**: el cuerpo del PDF quedó indentado un nivel "de menos" dentro de `renderDoc` (es válido y corre igual). Reflow opcional.
 
 ## 👤 Tareas del dueño (Fede) — en paralelo
 
-1. **Llenar el catálogo** con SQL por rubro (dry-run SELECT primero, siempre):
-   ```sql
-   -- ejemplo (descomentar tras revisar el count):
-   -- UPDATE catalogo_items SET es_cotizable = true
-   --   WHERE rubro = 'Pisos' AND precio_alquiler > 0 AND _deleted IS NOT TRUE;
-   ```
-   - Marcar `es_cotizable=true` + asegurar `precio_alquiler>0`. Opcional `unidad='m2'` (auto-cálculo). **NO tocar `categoria`.**
-   - Hoy hay **9 ítems cotizables** (3 alfombras m², 2 paneles OCTEXA, 1 reflector, TV, vinilo, vitrina).
-2. **Probar** el Brief y las cuentas con 2-3 casos reales y anotar qué falla.
+1. **Llenar el catálogo** con SQL por rubro (dry-run SELECT primero, siempre): marcar `es_cotizable=true` + `precio_alquiler>0`. Opcional `unidad='m2'`. **NO tocar `categoria`.** Hoy ~9 ítems cotizables. Cuantos más rubros con ítems, mejor rinden ghosts/brief.
+2. **Probar** Brief, cuentas y los 3 cambios nuevos con 2-3 casos reales y anotar qué falla.
 
 ## 🗂️ Dónde está cada cosa
 
 - **Fórmula**: `pricing.js` (`adjustmentFactor`, `loadedUnitPrice`, `compute`).
-- **Centro receta / acordeón / calor / auto-calc / fantasmas**: `script.js` (`renderItems`, `createItemCard`, `_enhanceAccordion`, `_updateHeat`, `_autoQuantityFor`, `_renderGhosts`, `_GHOST_AFFINITY`).
-- **Mapeo rubro→key**: `api.js` `convertToLocalFormat`.
-- **Brief**: `brief.js`.
-- **IA backend**: `server/index.js` (`callClaude`, `/api/ai/*`).
-- **PDF**: `script.js` `exportPDF` (jsPDF; márgenes/total/footer ahí).
-- **Marca/tokens**: `style.css` `:root`.
+- **PDF**: `script.js` `exportPDF` → `renderDoc(s)` + `G()` + ladder `FIT_LADDER` + `_lastPdfFit`. Márgenes/total/footer ahí.
+- **UI parámetros**: `index.html` `#general-params` (`.params-row-standtype`, `.params-row-fee`) + `style.css` (`#stand-params-block`/`#expo-params-block`/`.params-row-fee` border-top).
+- **Ghosts**: `script.js` (`_renderGhosts`, `_ruleGhosts`, `_paintGhosts`, `_maybeAIGhosts`, `_fetchAIGhosts`, `_GHOST_AFFINITY`) + `api.js` `aiGhosts` + `server/index.js` `POST /api/ai/ghosts`.
+- **Centro receta / acordeón / calor / auto-calc**: `script.js` (`renderItems`, `createItemCard`, `_enhanceAccordion`, `_updateHeat`, `_autoQuantityFor`).
+- **Mapeo rubro→key**: `api.js` `convertToLocalFormat`. **Brief**: `brief.js`. **IA backend**: `server/index.js` (`callClaude`, `/api/ai/*`). **Marca/tokens**: `style.css` `:root`.
 
 ## 🧪 Cómo retomar (reconocimiento rápido)
 
-1. `git log --oneline -12` y `git status` (confirmar limpio y en `1379272`).
+1. `git log --oneline -6` y `git status` (confirmar limpio y en `742d117`).
 2. Leer `CLAUDE.md` (ya actualizado con todo lo de arriba).
 3. Levantar el backend local y abrir `localhost:3001` para ver el estado real.
-4. Elegir un pendiente (sugerido: #1 simplificar UI, o #2 PDF scale-to-fit).
+4. Elegir un pendiente (sugerido: #1 — validar UI y PDF con ojo humano).

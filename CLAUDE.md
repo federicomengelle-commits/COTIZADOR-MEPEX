@@ -45,13 +45,19 @@ Favorites, Autosave, Templates, Compare, cotizaciones guardadas, número secuenc
 - **Nav izquierda colapsable** (`#btn-nav-collapse`, clase `.nav-collapsed`, persistida en localStorage).
 - **Marca MEPEX** aplicada (ver Stack › Marca).
 
+**Nuevos (2026-06, 2da tanda) — tampoco romper:**
+- **Parámetros agrupados**: `#general-params` en 3 bloques (identidad+modo / config del stand / fee) separados por `border-top` sutil + aire (reglas sobre `#stand-params-block`/`#expo-params-block`/`.params-row-fee`). "Tipo de Stand" salió a su fila propia (`.params-row-standtype`). Mismos controles, nada escondido (premisa del dueño).
+- **PDF scale-to-fit** (`exportPDF`): el dibujo vive en `renderDoc(s)` con `G(n)=n*s` que comprime SOLO el flujo del cuerpo (datos→rubros); elige la mayor escala que entra en 1 hoja. `s=1` ⇒ idéntico al PDF anterior.
+- **Sugerencias fantasma con IA**: `_renderGhosts` pinta reglas (instantáneo + fallback) y refina con `/api/ai/ghosts` (debounce 1.1s + cache por firma, badge "IA", motivo). Si la IA está off/caída, queda en reglas.
+
 ### 🟥 Zonas frágiles — no tocar sin avisar
 - **Flujo de guardado a Supabase** (`api.js` saveQuotation + `server/index.js` `/api/quotations` POST). Recién arreglado, funciona.
 - **Numerador secuencial** (`POST /api/cotizaciones/next-number`) — usa la función SQL atómica `siguiente_numero_cotizacion(anio)` sobre la tabla `cotizacion_numerador` (contador por año). NO hay fallback localStorage: si la API cae, el front bloquea el export. Formato `COT-YYYY-NNNN`. Si cambiás el formato, actualizá la función SQL y el padStart del server.
 - **Upload de PDF a Storage** (`POST /api/quotations/:id/pdf`).
 - **`pricing.js`** — fuente única de la fórmula. Respetar la REGLA DE CÁLCULO de arriba (ajustes sobre el subtotal, sumados, IVA al final, redondeo por línea).
+- **`script.js` `exportPDF`** — el dibujo vive en `renderDoc(s)`; `G(n)=n*s` comprime SOLO el flujo del cuerpo (datos→rubros). Header, footer y la **reserva de la caja de total (`ensureSpace(26)`)** quedan FIJOS. `s=1` debe seguir siendo idéntico al PDF actual (anti-regresión). Número de cotización y sanata IA se piden UNA vez aunque redibuje a varias escalas.
 - **Mapeo `rubro → key`** en `api.js convertToLocalFormat` — no romper el normalizado ni el fallback; NO mover el grouping a `categoria`.
-- **Endpoints IA** (`/api/ai/sanata`, `/api/ai/brief`, `/api/ai/status`) en `server/index.js` — degradan a 503 si falta `ANTHROPIC_API_KEY`; el front los consume defensivamente.
+- **Endpoints IA** (`/api/ai/sanata`, `/api/ai/brief`, `/api/ai/ghosts`, `/api/ai/status`) en `server/index.js` — degradan a 503 si falta `ANTHROPIC_API_KEY`; el front los consume defensivamente. `/api/ai/ghosts` valida los ids sugeridos contra el catálogo de candidatos provisto (sin alucinaciones).
 
 ## Stack
 
@@ -73,8 +79,8 @@ Favorites, Autosave, Templates, Compare, cotizaciones guardadas, número secuenc
 .
 ├── index.html              — Single page, 3 columnas. Fuentes Outfit + Space Mono. Carga brief.js
 ├── style.css               — Monolito CSS. Marca MEPEX en :root + centro receta + acordeón + brief
-├── script.js               — Monolito JS (sección Render). Centro receta, acordeón, calor, auto-calc, _renderGhosts
-├── api.js                  — Cliente REST + mapeo rubro→key (convertToLocalFormat) + métodos IA (aiSanata/aiBrief/aiStatus)
+├── script.js               — Monolito JS (sección Render). Centro receta, acordeón, calor, auto-calc, _renderGhosts (+IA), exportPDF (renderDoc/scale-to-fit)
+├── api.js                  — Cliente REST + mapeo rubro→key (convertToLocalFormat) + métodos IA (aiSanata/aiBrief/aiGhosts/aiStatus)
 ├── database.js             — Catálogo en memoria + DB.isAreaItem + cálculos auto (heightMultipliers, fees)
 ├── pricing.js              — FUENTE ÚNICA de la fórmula (adjustmentFactor + loadedUnitPrice + compute)
 ├── brief.js                — Brief Express (10 preguntas → params + items vía IA, preview, aplicar)
@@ -82,7 +88,7 @@ Favorites, Autosave, Templates, Compare, cotizaciones guardadas, número secuenc
 ├── quotation-storage.js    — Persistencia de cotizaciones guardadas
 ├── quotation-ui.js         — UI del modal "Cargar cotización"
 ├── server/
-│   ├── index.js                — Backend Express + endpoints IA (/api/ai/sanata|brief|status, callClaude)
+│   ├── index.js                — Backend Express + endpoints IA (/api/ai/sanata|brief|ghosts|status, callClaude)
 │   ├── .env.example            — Variables (Supabase + ANTHROPIC_API_KEY)
 │   ├── supabase-setup.sql      — Schema (mínimo, NO refleja toda la tabla)
 │   └── migrate-notion-to-supabase.js  — LEGACY (eliminar)
