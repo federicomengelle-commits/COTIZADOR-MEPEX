@@ -45,7 +45,23 @@ app.use(cors({
 }));
 
 app.use(express.json({ limit: '50mb' }));
-app.use(express.static(path.join(__dirname, '..')));
+
+// Static con revalidación obligatoria para HTML/JS/CSS: el navegador puede
+// cachear, pero SIEMPRE revalida (conditional GET → 304 si no cambió, fresh si
+// cambió). Evita la clase de bug "front viejo cacheado tras deploy" (p.ej. el
+// numerador clavado porque el browser servía un script.js previo con fallback).
+// Los assets (imágenes/fuentes) sí pueden cachear largo.
+app.use(express.static(path.join(__dirname, '..'), {
+    etag: true,
+    lastModified: true,
+    setHeaders: (res, filePath) => {
+        if (/\.(html|js|css)$/i.test(filePath)) {
+            res.setHeader('Cache-Control', 'no-cache');
+        } else if (/\.(png|jpe?g|gif|svg|woff2?|ttf|ico)$/i.test(filePath)) {
+            res.setHeader('Cache-Control', 'public, max-age=86400');
+        }
+    }
+}));
 
 // =============================================
 // FORMATTERS: row → response shape
