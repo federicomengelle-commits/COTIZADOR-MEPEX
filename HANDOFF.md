@@ -4,7 +4,7 @@
 
 ## 📍 Estado
 
-- **Repo**: `github.com/federicomengelle-commits/COTIZADOR-MEPEX` · branch **`main`** · último commit **`065c13f`** (pusheado).
+- **Repo**: `github.com/federicomengelle-commits/COTIZADOR-MEPEX` · branch **`main`** · último commit **`6171705`** (pusheado).
 - **Prod**: `http://195.200.1.250/cotizador/` · VPS `~/cotizador` · pm2 `cotizador-api`.
 - **Deploy**: `cd ~/cotizador && git pull origin main` + `pm2 restart cotizador-api` (el restart SOLO si se tocó `server/`; frontend solo = pull + Ctrl+Shift+R). ⚠️ **Esta sesión tocó `server/index.js` (endpoint nuevo) → el `pm2 restart` es obligatorio al deployar.**
 - **IA**: Claude Haiku 4.5. La `ANTHROPIC_API_KEY` va en `server/.env`. En **prod** está cargada (sanata/brief/ghosts funcionan). ⚠️ En la copia **CLEAN local NO está** → la IA degrada a reglas/503 (es esperado; se verifica en prod).
@@ -20,6 +20,7 @@
 | `26c72b6` | **Numerador "clavado en 14" = caché del browser** (NO el backend: la función SQL incrementa bien, verificado 15→18). Fix: server manda `Cache-Control: no-cache` en HTML/JS/CSS + `max-age` en assets → no vuelve a servirse un front viejo tras deploy. |
 | `cdd34b3` | **Ítem "desaparecía" en multi-espacio + fantasmas por sección**: el render ocultaba no-favoritos tras "Ver todos" (un ítem cargado en un espacio quedaba escondido en otro) → ahora muestra TODOS (favoritos primero). Las sugerencias dejan la franja al pie y se pintan en `.section-ghosts` dentro del rubro de su ítem. |
 | `065c13f` | **UI: Tipo de Stand a la derecha de las dimensiones** (aprovecha el hueco, ahorra un renglón). |
+| `6171705` | **Texto de la propuesta editable**: bloque en el centro tras los ítems (textarea + "Generar con IA"), persiste en `State.generalParams.proposalText`; el PDF usa el texto editado (autogenera si vacío). Mejor generación: ítems+cantidades + `temperature 0.6`. |
 
 > Sesiones previas (contexto): acordeón por rubro, endpoints IA sanata/brief, brief express, re-skin marca MEPEX, pricing sobre subtotal, auto-cálculo m², mapeo rubro→key robusto.
 

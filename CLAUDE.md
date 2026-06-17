@@ -41,7 +41,7 @@ Favorites, Autosave, Templates, Compare, cotizaciones guardadas, número secuenc
 - **Medidor de calor** (`_updateHeat`) en el resumen.
 - **Sugerencias fantasma**: se pintan DENTRO de la sección de cada ítem sugerido (`.section-ghosts` por rubro, `_renderGhosts`/`_paintGhosts`), agrupadas por la categoría real del sugerido. Reglas de afinidad `_GHOST_AFFINITY` como fallback + IA (`/api/ai/ghosts`). (Antes era una franja única al pie `#global-ghosts`, ya removida.)
 - **Brief Express** (`brief.js`): modal de 10 preguntas → setea params (disparando los controles reales) + mapea ítems vía `/api/ai/brief`. Botón `#btn-brief`.
-- **Sanata IA** en el PDF (entre título y rubros, vía `/api/ai/sanata`; se omite si la IA está off).
+- **Texto de la propuesta** (editable): bloque en el centro tras los ítems (`#proposal-block`, `_initProposalBlock`/`generateProposal`/`_buildSanataContext`) con textarea + botón "Generar con IA". Vive en `State.generalParams.proposalText` (persiste en borrador y cotización). El PDF lo usa **tal cual** (entre título y rubros); si queda vacío, autogenera vía `/api/ai/sanata`. La IA recibe los ítems **con cantidades** + `temperature 0.6` (menos random). Botón deshabilitado si la IA está off; el textarea siempre edita.
 - **Nav izquierda colapsable** (`#btn-nav-collapse`, clase `.nav-collapsed`, persistida en localStorage).
 - **Marca MEPEX** aplicada (ver Stack › Marca).
 
