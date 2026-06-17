@@ -1811,10 +1811,14 @@ input[type="checkbox"] {
     border-top: 1px solid var(--color-border);
 }
 
-/* Tipo de Stand en su propia fila — descomprime la fila de dimensiones */
-.params-row-standtype {
-    align-items: center;
-    margin-top: var(--spacing-md);
+/* Tipo de Stand vive en la fila de dimensiones, a la DERECHA de los inputs
+   (aprovecha el espacio libre y ahorra un renglón). Se estira con flex. */
+.params-row-dimensions > .param-inline-standtype {
+    flex: 1 1 auto;
+    min-width: 280px;
+}
+.param-inline-standtype .stand-type-inline {
+    flex-wrap: wrap;
 }
 
 /* Section Divider */
