@@ -36,19 +36,16 @@ Cualquier cambio que toque pricing/render debe respetar la diferencia por modo.
 ### 🟥 Featureset positivo que NO se rompe
 Favorites, Autosave, Templates, Compare, cotizaciones guardadas, número secuencial via API (`/api/cotizaciones/next-number`), Export PDF (jsPDF, tema dark turquesa), Export CSV, autocomplete cliente/proyecto/evento, Mobile FAB+drawer, shortcuts Ctrl+K/?/Esc, help tips, Toast+Confirm propios.
 
-**Nuevos (2026-06) — tampoco romper:**
-- **Centro tipo receta**: acordeón por rubro colapsable (`_enhanceAccordion`), filas con `+ Agregar` (picker) / renglón con stepper + total + quitar; renglones cargados arriba (CSS `order`). Delegación en `_initItemsDelegation`.
+**Nuevos (2026-06) — tampoco romper (estado final consolidado):**
+- **Centro tipo receta**: acordeón por rubro colapsable (`_enhanceAccordion`), filas con `+ Agregar` (picker) / renglón con stepper + total + quitar; renglones cargados arriba (CSS `order`). Delegación en `_initItemsDelegation`. **Muestra TODOS los ítems del rubro** (favoritos primero, sin ocultar): ocultar los no-favoritos tras "Ver todos" hacía "desaparecer" ítems al cambiar de espacio en multi → se quitó (`_renderItemGroup`).
+- **Parámetros agrupados**: `#general-params` en 3 bloques (identidad+modo / config del stand / fee) separados por `border-top` sutil + aire (reglas sobre `#stand-params-block`/`#expo-params-block`/`.params-row-fee`). **"Tipo de Stand" va a la DERECHA de Superficie/Frente/Profundidad** (clase `.param-inline-standtype` dentro de `.params-row-dimensions`, se estira con flex y ahorra un renglón). Mismos controles, nada escondido (premisa del dueño).
 - **Medidor de calor** (`_updateHeat`) en el resumen.
-- **Sugerencias fantasma**: se pintan DENTRO de la sección de cada ítem sugerido (`.section-ghosts` por rubro, `_renderGhosts`/`_paintGhosts`), agrupadas por la categoría real del sugerido. Reglas de afinidad `_GHOST_AFFINITY` como fallback + IA (`/api/ai/ghosts`). (Antes era una franja única al pie `#global-ghosts`, ya removida.)
+- **Sugerencias fantasma**: se pintan DENTRO de la sección de cada ítem sugerido (`.section-ghosts` por rubro; `_renderGhosts` → `_ruleGhosts` + `_paintGhosts`), agrupadas por la categoría real del sugerido. Reglas de afinidad `_GHOST_AFFINITY` = render instantáneo + **fallback**; si la IA está habilitada refina con `/api/ai/ghosts` (`_maybeAIGhosts`/`_fetchAIGhosts`, debounce 1.1s + cache por firma ítems+modo, badge "IA" + motivo); si la IA cae, queda en reglas. (Antes era una franja única al pie `#global-ghosts`, ya removida.)
+- **Texto de la propuesta** (editable): bloque en el centro tras los ítems (`#proposal-block`; `_initProposalBlock`/`generateProposal`/`_buildSanataContext`/`_refreshProposalUI`) con textarea + botón "Generar con IA". Vive en `State.generalParams.proposalText` (persiste en borrador y cotización). El PDF lo usa **tal cual** (entre título y rubros); si queda vacío, autogenera vía `/api/ai/sanata`. La IA recibe los ítems **con cantidades** + `temperature 0.6` (menos random). Botón deshabilitado si la IA está off; el textarea siempre edita.
 - **Brief Express** (`brief.js`): modal de 10 preguntas → setea params (disparando los controles reales) + mapea ítems vía `/api/ai/brief`. Botón `#btn-brief`.
-- **Texto de la propuesta** (editable): bloque en el centro tras los ítems (`#proposal-block`, `_initProposalBlock`/`generateProposal`/`_buildSanataContext`) con textarea + botón "Generar con IA". Vive en `State.generalParams.proposalText` (persiste en borrador y cotización). El PDF lo usa **tal cual** (entre título y rubros); si queda vacío, autogenera vía `/api/ai/sanata`. La IA recibe los ítems **con cantidades** + `temperature 0.6` (menos random). Botón deshabilitado si la IA está off; el textarea siempre edita.
+- **PDF scale-to-fit** (`exportPDF`): el dibujo vive en `renderDoc(s)` con `G(n)=n*s` que comprime SOLO el flujo del cuerpo (datos→rubros); elige la mayor escala que entra en 1 hoja. `s=1` ⇒ idéntico al PDF anterior. (Detalle en Zonas frágiles.)
 - **Nav izquierda colapsable** (`#btn-nav-collapse`, clase `.nav-collapsed`, persistida en localStorage).
 - **Marca MEPEX** aplicada (ver Stack › Marca).
-
-**Nuevos (2026-06, 2da tanda) — tampoco romper:**
-- **Parámetros agrupados**: `#general-params` en 3 bloques (identidad+modo / config del stand / fee) separados por `border-top` sutil + aire (reglas sobre `#stand-params-block`/`#expo-params-block`/`.params-row-fee`). "Tipo de Stand" salió a su fila propia (`.params-row-standtype`). Mismos controles, nada escondido (premisa del dueño).
-- **PDF scale-to-fit** (`exportPDF`): el dibujo vive en `renderDoc(s)` con `G(n)=n*s` que comprime SOLO el flujo del cuerpo (datos→rubros); elige la mayor escala que entra en 1 hoja. `s=1` ⇒ idéntico al PDF anterior.
-- **Sugerencias fantasma con IA**: `_renderGhosts` pinta reglas (instantáneo + fallback) y refina con `/api/ai/ghosts` (debounce 1.1s + cache por firma, badge "IA", motivo). Si la IA está off/caída, queda en reglas.
 
 ### 🟥 Zonas frágiles — no tocar sin avisar
 - **Flujo de guardado a Supabase** (`api.js` saveQuotation + `server/index.js` `/api/quotations` POST). Recién arreglado, funciona.
@@ -66,7 +63,7 @@ Favorites, Autosave, Templates, Compare, cotizaciones guardadas, número secuenc
 - Supabase (PostgreSQL + Auth + Storage). URL: `selnevalaeykdrgycvdz.supabase.co`.
 - Express backend en `server/index.js` (port 3001 local, `/cotizador-api/api` en prod).
 - jsPDF para PDFs (tema dark, turquesa `#00A9C1`).
-- **IA**: Claude Haiku 4.5 vía backend (`/api/ai/sanata`, `/api/ai/brief`, `/api/ai/status`), usando `fetch` nativo (Node 18+). Key `ANTHROPIC_API_KEY` en `server/.env` (+ opcional `ANTHROPIC_MODEL`). Decisión: usar Claude (no OpenAI) por coherencia de stack; a bajo volumen el costo es centavos/mes. ChatGPT Plus/Claude Pro ≠ API.
+- **IA**: Claude Haiku 4.5 vía backend (`/api/ai/sanata`, `/api/ai/brief`, `/api/ai/ghosts`, `/api/ai/status`), usando `fetch` nativo (Node 18+) desde `callClaude` (acepta `temperature` opcional). Key `ANTHROPIC_API_KEY` en `server/.env` (+ opcional `ANTHROPIC_MODEL`). Decisión: usar Claude (no OpenAI) por coherencia de stack; a bajo volumen el costo es centavos/mes. ChatGPT Plus/Claude Pro ≠ API.
 - **Marca MEPEX (2026-06)**: re-skin con el manual de LOBBY (`LOBBY-MEPEX/docs/MEPEX_BRAND.md`). Tokens en `style.css :root` (nombres viejos, valores nuevos): `--color-primary #00A9C1` (turquesa), `--color-secondary #F28D15`, `--color-bg #050505`, `--color-surface #111111`, `--color-success #00CC88`, texto `#E8E8E8/#888/#555`. Fuentes **Outfit** (UI) + **Space Mono** (montos/labels, `--font-mono`). Radios 4/6/10.
 - VPS Hostinger 195.200.1.250 (Ubuntu 24.04). El server corre con **pm2** como `cotizador-api`.
   - Deploy completo (frontend + backend): `cd ~/cotizador && git pull origin main && pm2 restart cotizador-api`
@@ -79,15 +76,15 @@ Favorites, Autosave, Templates, Compare, cotizaciones guardadas, número secuenc
 ```
 .
 ├── index.html              — Single page, 3 columnas. Fuentes Outfit + Space Mono. Carga brief.js
-├── style.css               — Monolito CSS. Marca MEPEX en :root + centro receta + acordeón + brief
-├── script.js               — Monolito JS (sección Render). Centro receta, acordeón, calor, auto-calc, _renderGhosts (+IA), exportPDF (renderDoc/scale-to-fit)
+├── style.css               — Monolito CSS. Marca MEPEX en :root + centro receta + acordeón + params agrupados + .section-ghosts + #proposal-block + brief
+├── script.js               — Monolito JS (sección Render). Centro receta (muestra todo), acordeón, calor, auto-calc, fantasmas por sección (+IA), texto de propuesta (_initProposalBlock/_buildSanataContext), exportPDF (renderDoc/scale-to-fit)
 ├── api.js                  — Cliente REST + mapeo rubro→key (convertToLocalFormat) + métodos IA (aiSanata/aiBrief/aiGhosts/aiStatus)
 ├── database.js             — Catálogo en memoria + DB.isAreaItem + cálculos auto (heightMultipliers, fees)
 ├── pricing.js              — FUENTE ÚNICA de la fórmula (adjustmentFactor + loadedUnitPrice + compute)
 ├── brief.js                — Brief Express (10 preguntas → params + items vía IA, preview, aplicar)
 ├── autocomplete.js         — Inputs autocomplete
-├── quotation-storage.js    — Persistencia de cotizaciones guardadas
-├── quotation-ui.js         — UI del modal "Cargar cotización"
+├── quotation-storage.js    — Persistencia de cotizaciones guardadas (incluye proposalText en _collectCurrentState)
+├── quotation-ui.js         — UI del modal "Cargar cotización" (_restoreState restaura proposalText, salvo en templates)
 ├── server/
 │   ├── index.js                — Backend Express + endpoints IA (/api/ai/sanata|brief|ghosts|status, callClaude)
 │   ├── .env.example            — Variables (Supabase + ANTHROPIC_API_KEY)
