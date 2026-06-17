@@ -4,7 +4,7 @@
 
 ## 📍 Estado
 
-- **Repo**: `github.com/federicomengelle-commits/cotizador-mepex` · branch **`main`** · último commit **`742d117`** (pusheado).
+- **Repo**: `github.com/federicomengelle-commits/COTIZADOR-MEPEX` · branch **`main`** · último commit **`065c13f`** (pusheado).
 - **Prod**: `http://195.200.1.250/cotizador/` · VPS `~/cotizador` · pm2 `cotizador-api`.
 - **Deploy**: `cd ~/cotizador && git pull origin main` + `pm2 restart cotizador-api` (el restart SOLO si se tocó `server/`; frontend solo = pull + Ctrl+Shift+R). ⚠️ **Esta sesión tocó `server/index.js` (endpoint nuevo) → el `pm2 restart` es obligatorio al deployar.**
 - **IA**: Claude Haiku 4.5. La `ANTHROPIC_API_KEY` va en `server/.env`. En **prod** está cargada (sanata/brief/ghosts funcionan). ⚠️ En la copia **CLEAN local NO está** → la IA degrada a reglas/503 (es esperado; se verifica en prod).
@@ -16,7 +16,10 @@
 |---|---|
 | `ce1c391` | **UI #1**: parámetros agrupados en 3 bloques (identidad+modo / config stand / fee) separados por línea sutil + aire; "Tipo de Stand" en fila propia (descomprime dimensiones). Sin esconder/sacar controles. |
 | `265c2c5` | **PDF #2**: achique automático (scale-to-fit). `renderDoc(s)` con `G(n)=n*s` comprime solo el flujo del cuerpo; elige la mayor escala que entra en 1 hoja. `s=1` = idéntico al actual (anti-regresión). |
-| `742d117` | **Ghosts IA #3**: endpoint `POST /api/ai/ghosts` (Haiku, valida ids) + front que refina la franja con IA (debounce+cache, badge "IA", motivo) y cae a reglas si la IA está off/caída. |
+| `742d117` | **Ghosts IA #3**: endpoint `POST /api/ai/ghosts` (Haiku, valida ids) + front que refina con IA (debounce+cache, badge "IA", motivo) y cae a reglas si la IA está off/caída. |
+| `26c72b6` | **Numerador "clavado en 14" = caché del browser** (NO el backend: la función SQL incrementa bien, verificado 15→18). Fix: server manda `Cache-Control: no-cache` en HTML/JS/CSS + `max-age` en assets → no vuelve a servirse un front viejo tras deploy. |
+| `cdd34b3` | **Ítem "desaparecía" en multi-espacio + fantasmas por sección**: el render ocultaba no-favoritos tras "Ver todos" (un ítem cargado en un espacio quedaba escondido en otro) → ahora muestra TODOS (favoritos primero). Las sugerencias dejan la franja al pie y se pintan en `.section-ghosts` dentro del rubro de su ítem. |
+| `065c13f` | **UI: Tipo de Stand a la derecha de las dimensiones** (aprovecha el hueco, ahorra un renglón). |
 
 > Sesiones previas (contexto): acordeón por rubro, endpoints IA sanata/brief, brief express, re-skin marca MEPEX, pricing sobre subtotal, auto-cálculo m², mapeo rubro→key robusto.
 

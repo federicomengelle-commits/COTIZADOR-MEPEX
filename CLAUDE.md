@@ -39,7 +39,7 @@ Favorites, Autosave, Templates, Compare, cotizaciones guardadas, número secuenc
 **Nuevos (2026-06) — tampoco romper:**
 - **Centro tipo receta**: acordeón por rubro colapsable (`_enhanceAccordion`), filas con `+ Agregar` (picker) / renglón con stepper + total + quitar; renglones cargados arriba (CSS `order`). Delegación en `_initItemsDelegation`.
 - **Medidor de calor** (`_updateHeat`) en el resumen.
-- **Sugerencias fantasma**: franja ÚNICA al pie del centro (`#global-ghosts`, `_renderGhosts`), reglas de afinidad `_GHOST_AFFINITY`. Cada sugerencia etiqueta su rubro.
+- **Sugerencias fantasma**: se pintan DENTRO de la sección de cada ítem sugerido (`.section-ghosts` por rubro, `_renderGhosts`/`_paintGhosts`), agrupadas por la categoría real del sugerido. Reglas de afinidad `_GHOST_AFFINITY` como fallback + IA (`/api/ai/ghosts`). (Antes era una franja única al pie `#global-ghosts`, ya removida.)
 - **Brief Express** (`brief.js`): modal de 10 preguntas → setea params (disparando los controles reales) + mapea ítems vía `/api/ai/brief`. Botón `#btn-brief`.
 - **Sanata IA** en el PDF (entre título y rubros, vía `/api/ai/sanata`; se omite si la IA está off).
 - **Nav izquierda colapsable** (`#btn-nav-collapse`, clase `.nav-collapsed`, persistida en localStorage).
@@ -53,6 +53,7 @@ Favorites, Autosave, Templates, Compare, cotizaciones guardadas, número secuenc
 ### 🟥 Zonas frágiles — no tocar sin avisar
 - **Flujo de guardado a Supabase** (`api.js` saveQuotation + `server/index.js` `/api/quotations` POST). Recién arreglado, funciona.
 - **Numerador secuencial** (`POST /api/cotizaciones/next-number`) — usa la función SQL atómica `siguiente_numero_cotizacion(anio)` sobre la tabla `cotizacion_numerador` (contador por año). NO hay fallback localStorage: si la API cae, el front bloquea el export. Formato `COT-YYYY-NNNN`. Si cambiás el formato, actualizá la función SQL y el padStart del server.
+  - **La función incrementa bien (verificado).** Si ves números REPETIDOS (ej. "todas son la 14"), es **caché del navegador** sirviendo un front viejo (con el fallback localStorage que ya no existe). Por eso el server manda `Cache-Control: no-cache` en HTML/JS/CSS (revalida siempre) — tras desplegar ESE fix, un hard-refresh único limpia el front viejo y no vuelve a pasar.
 - **Upload de PDF a Storage** (`POST /api/quotations/:id/pdf`).
 - **`pricing.js`** — fuente única de la fórmula. Respetar la REGLA DE CÁLCULO de arriba (ajustes sobre el subtotal, sumados, IVA al final, redondeo por línea).
 - **`script.js` `exportPDF`** — el dibujo vive en `renderDoc(s)`; `G(n)=n*s` comprime SOLO el flujo del cuerpo (datos→rubros). Header, footer y la **reserva de la caja de total (`ensureSpace(26)`)** quedan FIJOS. `s=1` debe seguir siendo idéntico al PDF actual (anti-regresión). Número de cotización y sanata IA se piden UNA vez aunque redibuje a varias escalas.
