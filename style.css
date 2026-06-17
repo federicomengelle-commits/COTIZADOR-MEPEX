@@ -1777,6 +1777,22 @@ input[type="checkbox"] {
     flex: 1 1 auto;
 }
 
+/* ── Agrupación de parámetros (2026-06): separa identidad+modo / configuración
+   del stand / fee con una línea sutil y aire, sin esconder ni sacar controles. ── */
+#stand-params-block,
+#expo-params-block,
+.params-row-fee {
+    margin-top: var(--spacing-lg);
+    padding-top: var(--spacing-lg);
+    border-top: 1px solid var(--color-border);
+}
+
+/* Tipo de Stand en su propia fila — descomprime la fila de dimensiones */
+.params-row-standtype {
+    align-items: center;
+    margin-top: var(--spacing-md);
+}
+
 /* Section Divider */
 .section-divider {
     display: flex;
