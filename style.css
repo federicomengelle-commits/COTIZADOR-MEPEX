@@ -825,6 +825,17 @@ h4 {
     vertical-align: middle;
 }
 
+/* Sugerencias fantasma DENTRO de cada rubro (reemplazan la franja global al pie) */
+.section-ghosts {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xs);
+    margin: var(--spacing-xs) 0 var(--spacing-sm);
+}
+.section-ghosts:empty {
+    display: none;
+}
+
 .ghost-row {
     display: flex;
     align-items: center;

@@ -1705,6 +1705,8 @@ const Render = {
             if (catItems.length === 0) return; // No mostrar categorías vacías
 
             let sectionHTML = `<h3 class="category-title">${cat.icon} ${cat.name}</h3>`;
+            // Contenedor de sugerencias fantasma DE ESTE rubro (se llena en _paintGhosts).
+            sectionHTML += `<div class="section-ghosts" data-cat="${cat.id}"></div>`;
 
             // Si tiene subcategorías
             if (DATABASE.categories[cat.id].subcategories) {
@@ -1744,9 +1746,8 @@ const Render = {
             }
         });
 
-        // Franja ÚNICA de sugerencias, ABAJO de todos los rubros (no dentro de cada uno,
-        // así nunca caen en el rubro equivocado). Se llena en _renderGhosts.
-        mainContainer.insertAdjacentHTML('beforeend', '<div class="global-ghosts" id="global-ghosts"></div>');
+        // Las sugerencias fantasma ahora van DENTRO de cada rubro (.section-ghosts),
+        // cada una en la sección de SU ítem (se llenan en _renderGhosts/_paintGhosts).
 
         this.attachItemListeners();
         this.reapplySearchFilter();
@@ -1870,18 +1871,27 @@ const Render = {
         return sugs;
     },
 
-    // Pinta la franja única al pie. `sugs`: [{ it, from, motivo? }]. isAI cambia el rótulo.
+    // Pinta las sugerencias DENTRO de la sección de cada ítem sugerido (agrupadas por
+    // su categoría real). `sugs`: [{ it, from, motivo? }]. isAI cambia el rótulo/badge.
     _paintGhosts(sugs, isAI) {
-        const cont = document.getElementById('global-ghosts');
-        if (!cont) return;
-        if (!sugs || sugs.length === 0) { cont.innerHTML = ''; return; }
-        const titulo = isAI ? 'Sugerencias de la IA para tu propuesta' : 'Sugerencias para tu stand';
-        cont.innerHTML = `<div class="ghost-label"><span class="ghost-spark">✦</span> ${titulo}${isAI ? ' <span class="ghost-ia">IA</span>' : ''}</div>` +
-            sugs.slice(0, 4).map(s => `
-                <div class="ghost-row">
-                    <span class="ghost-name">${s.it.name} <small>· ${s.motivo || s.from}</small></span>
-                    <button class="btn-add ghost-add" data-action="add" data-id="${s.it.id}">+ Sumar</button>
-                </div>`).join('');
+        // Limpiar todos los contenedores por sección (y el legacy global si quedara)
+        document.querySelectorAll('.section-ghosts').forEach(c => c.innerHTML = '');
+        const legacy = document.getElementById('global-ghosts');
+        if (legacy) legacy.innerHTML = '';
+        if (!sugs || sugs.length === 0) return;
+        // Agrupar por la categoría del ítem sugerido → cada uno en SU rubro
+        const byCat = {};
+        sugs.forEach(s => { (byCat[s.it.category] = byCat[s.it.category] || []).push(s); });
+        Object.entries(byCat).forEach(([cat, list]) => {
+            const cont = document.querySelector(`.section-ghosts[data-cat="${cat}"]`);
+            if (!cont) return;
+            cont.innerHTML = `<div class="ghost-label"><span class="ghost-spark">✦</span> Sugerido${isAI ? ' <span class="ghost-ia">IA</span>' : ''}</div>` +
+                list.slice(0, 3).map(s => `
+                    <div class="ghost-row">
+                        <span class="ghost-name">${s.it.name}${s.motivo ? ` <small>· ${s.motivo}</small>` : ''}</span>
+                        <button class="btn-add ghost-add" data-action="add" data-id="${s.it.id}">+ Sumar</button>
+                    </div>`).join('');
+        });
     },
 
     // IDs de ítems cargados (stand: selectedItems; multi: unión de espacios).
@@ -1956,36 +1966,14 @@ const Render = {
         label.textContent = `Agregar a ${displayName}`;
         container.appendChild(label);
 
+        // Favoritos primero (orden), pero SIN ocultar el resto. Ocultar lo no-favorito
+        // detrás de "Ver todos" hacía "desaparecer" items al cambiar de espacio en multi
+        // (un ítem visible por estar cargado en un espacio quedaba escondido en otro,
+        // donde no estaba cargado). El acordeón por rubro ya maneja el clutter → mostramos
+        // TODO, con los favoritos arriba.
         const favorites = items.filter(i => Favorites.isFavorite(i));
-        const nonFavorites = items.filter(i => !Favorites.isFavorite(i));
-
-        // Fallback graceful: si no hay favoritos, mostrar todos como siempre
-        if (favorites.length === 0) {
-            items.forEach(item => container.appendChild(this.createItemCard(item)));
-            return;
-        }
-
-        // Renderizar favoritos normalmente
-        favorites.forEach(item => container.appendChild(this.createItemCard(item)));
-
-        // Si no hay no-favoritos, terminar
-        if (nonFavorites.length === 0) return;
-
-        // Renderizar no-favoritos con clase .non-favorite (ocultos por CSS)
-        nonFavorites.forEach(item => {
-            const card = this.createItemCard(item);
-            card.classList.add('non-favorite');
-            container.appendChild(card);
-        });
-
-        // Botón toggle "Ver todos / Ver menos" — click manejado por delegación en #items-container
-        const btn = document.createElement('button');
-        btn.className = 'toggle-all-btn';
-        btn.dataset.containerId = container.id;
-        btn.dataset.nonFavCount = nonFavorites.length;
-        btn.dataset.catName = displayName;
-        btn.textContent = `Ver todos los items de ${displayName} (+${nonFavorites.length} más)`;
-        container.parentNode.insertBefore(btn, container.nextSibling);
+        const rest = items.filter(i => !Favorites.isFavorite(i));
+        [...favorites, ...rest].forEach(item => container.appendChild(this.createItemCard(item)));
     },
 
     createItemCard(item) {
