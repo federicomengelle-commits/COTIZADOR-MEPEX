@@ -1845,10 +1845,16 @@ const Render = {
     },
 
     _renderGhosts() {
-        const cont = document.getElementById('global-ghosts');
-        if (!cont) return;
-        // Junta complementos (de rubros afines) de TODOS los rubros activos, con dedup
-        // global, y los muestra en UNA sola franja al pie — cada uno con su rubro de origen.
+        // 1) Reglas de afinidad: render INSTANTÁNEO (sin red) y fallback si la IA está
+        //    off/caída. 2) Si la IA está habilitada, refina la franja con sugerencias
+        //    contextuales (debounced + cache), sin spamear el backend.
+        this._paintGhosts(this._ruleGhosts(), false);
+        this._maybeAIGhosts();
+    },
+
+    // Sugerencias por reglas de afinidad cross-rubro (v1, fallback). Para cada rubro con
+    // algo cargado, propone ítems NO cargados de rubros afines, con dedup global.
+    _ruleGhosts() {
         const seen = new Set();
         const sugs = [];
         DB.getCategories().forEach(cat => {
@@ -1861,13 +1867,85 @@ const Render = {
                 }
             }
         });
-        if (sugs.length === 0) { cont.innerHTML = ''; return; }
-        cont.innerHTML = `<div class="ghost-label"><span class="ghost-spark">✦</span> Sugerencias para tu stand</div>` +
+        return sugs;
+    },
+
+    // Pinta la franja única al pie. `sugs`: [{ it, from, motivo? }]. isAI cambia el rótulo.
+    _paintGhosts(sugs, isAI) {
+        const cont = document.getElementById('global-ghosts');
+        if (!cont) return;
+        if (!sugs || sugs.length === 0) { cont.innerHTML = ''; return; }
+        const titulo = isAI ? 'Sugerencias de la IA para tu propuesta' : 'Sugerencias para tu stand';
+        cont.innerHTML = `<div class="ghost-label"><span class="ghost-spark">✦</span> ${titulo}${isAI ? ' <span class="ghost-ia">IA</span>' : ''}</div>` +
             sugs.slice(0, 4).map(s => `
                 <div class="ghost-row">
-                    <span class="ghost-name">${s.it.name} <small>· ${s.from}</small></span>
+                    <span class="ghost-name">${s.it.name} <small>· ${s.motivo || s.from}</small></span>
                     <button class="btn-add ghost-add" data-action="add" data-id="${s.it.id}">+ Sumar</button>
                 </div>`).join('');
+    },
+
+    // IDs de ítems cargados (stand: selectedItems; multi: unión de espacios).
+    _loadedItemIds() {
+        const ids = new Set();
+        if (!State.isMultiSpaceMode()) {
+            Object.entries(State.selectedItems || {}).forEach(([id, d]) => { if (d.quantity > 0) ids.add(id); });
+        } else {
+            (State.generalParams.spaces || []).forEach(sp =>
+                Object.entries(sp.items || {}).forEach(([id, d]) => { if (d.quantity > 0) ids.add(id); }));
+        }
+        return [...ids];
+    },
+
+    // Refina con IA si está habilitada. Debounce + cache por firma (ítems cargados + modo)
+    // para no llamar al backend en cada cambio de cantidad.
+    _maybeAIGhosts() {
+        // Estado de la IA: se consulta UNA vez y se cachea. Hasta confirmar, solo reglas.
+        if (this._aiEnabled === undefined) {
+            this._aiEnabled = false;
+            if (typeof API !== 'undefined' && API.aiStatus) {
+                API.aiStatus()
+                    .then(s => { this._aiEnabled = !!(s && s.enabled); if (this._aiEnabled) this._maybeAIGhosts(); })
+                    .catch(() => { });
+            }
+            return;
+        }
+        if (!this._aiEnabled) return;
+        const loadedIds = this._loadedItemIds();
+        if (loadedIds.length === 0) return; // nada cargado → sin sugerencias (igual que reglas)
+        const sig = loadedIds.slice().sort().join(',') + '|' + State.generalParams.quotationType;
+        if (sig === this._ghostAISig && this._ghostAICache) { this._paintGhosts(this._ghostAICache, true); return; }
+        clearTimeout(this._ghostAITimer);
+        this._ghostAITimer = setTimeout(() => this._fetchAIGhosts(sig, loadedIds), 1100);
+    },
+
+    async _fetchAIGhosts(sig, loadedIds) {
+        try {
+            const loadedSet = new Set(loadedIds);
+            const rubro = (it) => DATABASE.categories[it.category]?.name || it.category;
+            const loaded = loadedIds.map(id => DB.getItemById(id)).filter(Boolean)
+                .map(it => ({ name: it.name, rubro: rubro(it) }));
+            const candidates = DATABASE.items.filter(it => !loadedSet.has(it.id))
+                .map(it => ({ id: it.id, name: it.name, rubro: rubro(it) }));
+            if (candidates.length === 0) return;
+            const resp = await API.aiGhosts({
+                tipo: State.generalParams.quotationType,
+                superficie: State.generalParams.metraje,
+                loaded, candidates
+            });
+            const list = ((resp && resp.suggestions) || [])
+                .map(s => { const it = DB.getItemById(s.id); return it ? { it, from: rubro(it), motivo: s.motivo } : null; })
+                .filter(Boolean)
+                .filter(s => State.getItemQuantity(s.it.id) === 0);
+            if (list.length === 0) return; // sin sugerencias válidas → quedan las reglas
+            this._ghostAISig = sig;
+            this._ghostAICache = list;
+            // Pintar solo si la selección no cambió mientras esperábamos la respuesta.
+            const nowSig = this._loadedItemIds().slice().sort().join(',') + '|' + State.generalParams.quotationType;
+            if (nowSig === sig) this._paintGhosts(list, true);
+        } catch (e) {
+            // IA caída/sin key → nos quedamos con las reglas ya pintadas.
+            if (/no configurada|NO_KEY|503/i.test(e.message || '')) this._aiEnabled = false;
+        }
     },
 
     // Renderiza un grupo de items en un contenedor con lógica de favoritos

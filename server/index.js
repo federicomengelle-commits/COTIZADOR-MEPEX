@@ -963,6 +963,28 @@ app.post('/api/ai/brief', async (req, res) => {
     }
 });
 
+// Sugerencias fantasma (cross-sell) contextuales con IA (Fase 4). El front pasa los
+// ítems YA cargados + un catálogo de candidatos (no cargados); la IA elige hasta 4
+// complementos. Validamos los ids contra el catálogo provisto (sin alucinaciones).
+app.post('/api/ai/ghosts', async (req, res) => {
+    try {
+        const { loaded = [], candidates = [], tipo, superficie } = req.body || {};
+        if (!candidates.length) return res.json({ success: true, suggestions: [] });
+        const system = 'Sos un asesor comercial de MEPEX (montaje y equipamiento para stands y exposiciones). Te paso los ítems YA cargados en una cotización y un CATÁLOGO de candidatos (ítems NO cargados). Sugerí hasta 4 ítems del catálogo que mejor COMPLEMENTEN la propuesta (cross-sell coherente y útil para el cliente, no relleno). Devolvé EXCLUSIVAMENTE un JSON válido, sin texto extra, con la forma {"suggestions":[{"id":"<id EXACTO del catálogo>","motivo":"<máx 5 palabras>"}]}. Usá SOLO ids que existan en candidates. No sugieras ítems ya cargados. Si no hay buenos complementos, devolvé {"suggestions":[]}.';
+        const user = `CONTEXTO: tipo=${tipo || 'stand'}${superficie ? `, superficie=${superficie}m²` : ''}\n\nYA CARGADOS:\n${loaded.map(i => `- ${i.name} (${i.rubro || ''})`).join('\n') || '(ninguno)'}\n\nCATÁLOGO CANDIDATOS (id · nombre · rubro):\n${candidates.map(i => `${i.id} · ${i.name} · ${i.rubro || ''}`).join('\n')}`;
+        const text = await callClaude({ system, user, maxTokens: 400 });
+        let parsed = { suggestions: [] };
+        try { const m = text.match(/\{[\s\S]*\}/); parsed = JSON.parse(m ? m[0] : text); } catch { /* respuesta no-JSON → sin sugerencias */ }
+        const valid = new Set(candidates.map(c => c.id));
+        const suggestions = (parsed.suggestions || []).filter(s => s && valid.has(s.id)).slice(0, 4);
+        res.json({ success: true, suggestions });
+    } catch (error) {
+        const status = error.code === 'NO_KEY' ? 503 : 502;
+        console.error('❌ IA ghosts:', error.message);
+        res.status(status).json({ success: false, error: error.message });
+    }
+});
+
 // =============================================
 // START SERVER
 // =============================================

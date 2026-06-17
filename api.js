@@ -92,6 +92,9 @@ const API = {
     async aiBrief(brief, catalog) {
         return await this.request('/ai/brief', { method: 'POST', body: JSON.stringify({ brief, catalog }) });
     },
+    async aiGhosts(ctx) {
+        return await this.request('/ai/ghosts', { method: 'POST', body: JSON.stringify(ctx) });
+    },
 
     // Obtener catálogo completo
     async getCatalog(forceRefresh = false) {
