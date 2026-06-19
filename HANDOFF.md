@@ -21,6 +21,7 @@
 | `cdd34b3` | **Ítem "desaparecía" en multi-espacio + fantasmas por sección**: el render ocultaba no-favoritos tras "Ver todos" (un ítem cargado en un espacio quedaba escondido en otro) → ahora muestra TODOS (favoritos primero). Las sugerencias dejan la franja al pie y se pintan en `.section-ghosts` dentro del rubro de su ítem. |
 | `065c13f` | **UI: Tipo de Stand a la derecha de las dimensiones** (aprovecha el hueco, ahorra un renglón). |
 | `6171705` | **Texto de la propuesta editable**: bloque en el centro tras los ítems (textarea + "Generar con IA"), persiste en `State.generalParams.proposalText`; el PDF usa el texto editado (autogenera si vacío). Mejor generación: ítems+cantidades + `temperature 0.6`. |
+| _(sesión 2026-06-18, sin commitear aún)_ | **Numerador diferido en preview**: `exportPDF` en modo preview ya NO reserva número al abrir (cancelar dejaba huecos en la secuencia). Dibuja con placeholder `COT-AAAA-XXXX` y reserva el número real RECIÉN al click "Descargar y guardar" (`finalize()` reserva + re-renderiza a la misma escala + guarda). Export directo (sin preview) intacto. Guard anti-doble-click; si la API falla al descargar, el modal queda abierto para reintentar. **Verificado headless**: abrir preview = 0 reservas, descargar = 1 reserva (`numCallsAfterOpen:0`, `numCallsAfterDownload:1`), `s=1` sin regresión. |
 
 > Sesiones previas (contexto): acordeón por rubro, endpoints IA sanata/brief, brief express, re-skin marca MEPEX, pricing sobre subtotal, auto-cálculo m², mapeo rubro→key robusto.
 
@@ -38,7 +39,7 @@
 ## 🔜 PENDIENTES (en orden sugerido)
 
 1. **PDF — validación visual pendiente**: exportar un caso *borderline* (ej. expo con varios espacios) y mirar que el achique no apriete feo (interlínea/mínimos). El conteo de hojas está verificado headless; el pixel no. (La UI nueva ya la aprobó el dueño: "más linda, más espaciosa, genial".)
-2. **Texto de la propuesta — afinar (opcional)**: quedó pendiente el selector de tono (formal/cálido/técnico) + largo — el dueño eligió "mejorar la calidad nomás" por ahora. Si el texto sigue saliendo flojo en prod, ajustar el prompt de `/api/ai/sanata`. Relacionado: **reservar el número de cotización recién al confirmar "Descargar"** (hoy se reserva al abrir el preview → cancelar quema un número, deja huecos).
+2. **Texto de la propuesta — afinar (opcional)**: quedó pendiente el selector de tono (formal/cálido/técnico) + largo — el dueño eligió "mejorar la calidad nomás" por ahora. Si el texto sigue saliendo flojo en prod, ajustar el prompt de `/api/ai/sanata`. ~~Relacionado: reservar el número recién al confirmar "Descargar"~~ → **HECHO** (sesión 2026-06-18, ver tabla arriba): cancelar el preview ya no quema número.
 3. **Ghosts IA — tope de candidatos**: hoy el front manda TODOS los ítems no cargados como candidatos. Con ~9 ítems es trivial, pero cuando el catálogo crezca conviene capar (ej. top ~60 por afinidad) para acotar prompt/costo.
 4. **Brief fino end-to-end**: ajustar el mapeo de ítems; rinde poco hasta que el catálogo crezca.
 5. **Fase 5 — avatar "Martín"**: vendedor IA que hace el ping-pong del brief. Idea futura.

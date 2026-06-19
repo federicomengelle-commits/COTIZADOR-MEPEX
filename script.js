@@ -3529,23 +3529,33 @@ const Render = {
 
         // Número de cotización: SOLO desde la API (contador atómico en la DB).
         // Sin fallback localStorage — generaba números fantasma que colisionaban
-        // (ej. COT-2026-0008 en PDF pero no en DB). Si la API no responde, se
-        // bloquea la exportación: no hay número válido = no hay cotización.
+        // (ej. COT-2026-0008 en PDF pero no en DB).
+        //
+        // ⚠️ Reserva diferida en modo preview: el contador es monótono (no se puede
+        // "devolver" un número), así que cancelar el preview dejaba huecos en la
+        // secuencia. En preview NO se reserva todavía — el PDF se dibuja con un
+        // placeholder y el número real se pide RECIÉN al confirmar "Descargar y
+        // guardar" (ver finalize() más abajo). En export directo el click ES la
+        // confirmación, así que se reserva acá.
         let cotNumber;
-        try {
-            if (typeof API === 'undefined' || !API.isConnected) {
-                throw new Error('API no conectada');
+        if (options.preview) {
+            cotNumber = `COT-${today.getFullYear()}-XXXX`; // placeholder visible en el preview
+        } else {
+            try {
+                if (typeof API === 'undefined' || !API.isConnected) {
+                    throw new Error('API no conectada');
+                }
+                const numData = await API.getNextQuotationNumber();
+                if (!numData?.formatted) throw new Error('respuesta sin número');
+                cotNumber = numData.formatted;
+                console.log(`🔢 Número de cotización reservado: ${cotNumber}`);
+            } catch (e) {
+                console.error('❌ No se pudo reservar número de cotización:', e.message);
+                if (typeof Toast !== 'undefined') {
+                    Toast.error('No se pudo conectar con el servidor para numerar la cotización. Revisá la conexión e intentá de nuevo.');
+                }
+                return; // aborta la exportación — no se genera PDF sin número válido
             }
-            const numData = await API.getNextQuotationNumber();
-            if (!numData?.formatted) throw new Error('respuesta sin número');
-            cotNumber = numData.formatted;
-            console.log(`🔢 Número de cotización reservado: ${cotNumber}`);
-        } catch (e) {
-            console.error('❌ No se pudo reservar número de cotización:', e.message);
-            if (typeof Toast !== 'undefined') {
-                Toast.error('No se pudo conectar con el servidor para numerar la cotización. Revisá la conexión e intentá de nuevo.');
-            }
-            return; // aborta la exportación — no se genera PDF sin número válido
         }
 
         // Colores MEPEX (dark theme)
@@ -4097,23 +4107,60 @@ const Render = {
         // GUARDAR PDF
         // ========================================
         const safeCliente = (cliente || 'cliente').replace(/[^a-zA-Z0-9_-]+/g, '_').slice(0, 40);
-        const fileName = `MEPEX_${cotNumber}_${safeCliente}_${today.toISOString().split('T')[0]}.pdf`;
+        const fileNameFor = (num) => `MEPEX_${num}_${safeCliente}_${today.toISOString().split('T')[0]}.pdf`;
 
+        // Modo preview: mostrar el PDF (con número placeholder) en un modal. El número
+        // real se reserva RECIÉN al confirmar "Descargar y guardar" → cancelar el preview
+        // NO quema un número de la secuencia. finalize() reserva el número, redibuja a la
+        // MISMA escala elegida (solo cambia el "Ref:" del footer) y devuelve el PDF final.
+        if (options.preview) {
+            let previewBlob = null;
+            try {
+                previewBlob = doc.output('blob');
+            } catch (e) {
+                console.warn('⚠️ No se pudo generar el blob del preview:', e);
+            }
+            if (!previewBlob) {
+                if (typeof Toast !== 'undefined') Toast.error('No se pudo generar la vista previa del PDF.');
+                return;
+            }
+            const chosenScale = chosen.scale;
+            const finalize = async () => {
+                let realNumber;
+                try {
+                    if (typeof API === 'undefined' || !API.isConnected) {
+                        throw new Error('API no conectada');
+                    }
+                    const numData = await API.getNextQuotationNumber();
+                    if (!numData?.formatted) throw new Error('respuesta sin número');
+                    realNumber = numData.formatted;
+                    console.log(`🔢 Número de cotización reservado: ${realNumber}`);
+                } catch (e) {
+                    console.error('❌ No se pudo reservar número de cotización:', e.message);
+                    return null; // el modal avisa y deja reintentar (no se quemó número)
+                }
+                cotNumber = realNumber; // renderDoc dibuja el "Ref:" con el número real
+                const finalDoc = (await renderDoc(chosenScale)).doc;
+                let finalBlob = null;
+                try {
+                    finalBlob = finalDoc.output('blob');
+                } catch (e) {
+                    console.warn('⚠️ No se pudo generar el blob del PDF (se guardará igualmente):', e);
+                }
+                return { doc: finalDoc, blob: finalBlob, cotNumber: realNumber, fileName: fileNameFor(realNumber) };
+            };
+            this._showPDFPreview(previewBlob, finalize);
+            return;
+        }
+
+        // Export directo (sin preview): el número ya se reservó arriba (el click es la confirmación).
         let pdfBlob = null;
         try {
             pdfBlob = doc.output('blob');
         } catch (e) {
             console.warn('⚠️ No se pudo generar el blob del PDF (se guardará igualmente):', e);
         }
-
-        // Modo preview: mostrar en modal antes de descargar/guardar.
-        // El user decide desde el modal si descarga y guarda, o descarta.
-        if (options.preview && pdfBlob) {
-            this._showPDFPreview(pdfBlob, doc, fileName, cotNumber);
-            return;
-        }
-
-        doc.save(fileName);
+        doc.save(fileNameFor(cotNumber));
 
         // Guardar cotización (API + localStorage) + subir PDF a Supabase en background
         if (typeof QuotationStorage !== 'undefined') {
@@ -4123,9 +4170,12 @@ const Render = {
         }
     },
 
-    // Modal de vista previa del PDF. El user decide si descargar+guardar o descartar.
-    _showPDFPreview(pdfBlob, doc, fileName, cotNumber) {
-        const url = URL.createObjectURL(pdfBlob);
+    // Modal de vista previa del PDF. El número de cotización se reserva RECIÉN cuando
+    // el user confirma "Descargar y guardar" (vía finalize()), NO al abrir el preview:
+    // así cancelar/cerrar/Esc no consume un número de la secuencia. finalize() devuelve
+    // { doc, blob, cotNumber, fileName } ya con el número real, o null si la API falló.
+    _showPDFPreview(previewBlob, finalize) {
+        const url = URL.createObjectURL(previewBlob);
 
         const overlay = document.createElement('div');
         overlay.className = 'pdf-preview-overlay';
@@ -4137,8 +4187,8 @@ const Render = {
                     <div class="pdf-preview-title">
                         <span class="pdf-preview-icon">📄</span>
                         <div>
-                            <div class="pdf-preview-cot">${cotNumber}</div>
-                            <div class="pdf-preview-meta">Vista previa — no se descargó todavía</div>
+                            <div class="pdf-preview-cot">Vista previa</div>
+                            <div class="pdf-preview-meta">El número se asigna al descargar</div>
                         </div>
                     </div>
                     <button type="button" class="pdf-preview-close" aria-label="Cerrar">✕</button>
@@ -4158,9 +4208,16 @@ const Render = {
         const cleanup = () => {
             if (cleaned) return;
             cleaned = true;
+            document.removeEventListener('keydown', onKey);
             try { URL.revokeObjectURL(url); } catch { /* silent */ }
             overlay.remove();
         };
+
+        // Esc cierra (no reserva número)
+        const onKey = (e) => {
+            if (e.key === 'Escape') cleanup();
+        };
+        document.addEventListener('keydown', onKey);
 
         overlay.querySelector('.pdf-preview-close').addEventListener('click', cleanup);
         overlay.querySelector('.pdf-preview-cancel').addEventListener('click', cleanup);
@@ -4168,31 +4225,41 @@ const Render = {
             if (e.target === overlay) cleanup();
         });
 
-        // Esc cierra
-        const onKey = (e) => {
-            if (e.key === 'Escape') {
-                cleanup();
-                document.removeEventListener('keydown', onKey);
-            }
-        };
-        document.addEventListener('keydown', onKey);
-
-        // Descargar y guardar: usamos doc.save() para mantener el mismo flujo que antes,
-        // y después delegamos a QuotationStorage para persistir
-        overlay.querySelector('.pdf-preview-download').addEventListener('click', () => {
+        // Descargar y guardar: acá (y SOLO acá) se reserva el número real y se re-renderiza
+        // el PDF. Si la API falla, NO se cierra el modal y se deja reintentar (no se quemó nada).
+        const downloadBtn = overlay.querySelector('.pdf-preview-download');
+        let busy = false;
+        downloadBtn.addEventListener('click', async () => {
+            if (busy) return; // evita doble-reserva por doble click
+            busy = true;
+            const prevHTML = downloadBtn.innerHTML;
+            downloadBtn.disabled = true;
+            downloadBtn.innerHTML = '<span class="mp-spinner"></span>Numerando...';
+            const reEnable = () => {
+                downloadBtn.disabled = false;
+                downloadBtn.innerHTML = prevHTML;
+                busy = false;
+            };
             try {
-                doc.save(fileName);
+                const result = await finalize();
+                if (!result) {
+                    if (typeof Toast !== 'undefined') Toast.error('No se pudo numerar la cotización (servidor). Revisá la conexión e intentá de nuevo.');
+                    reEnable();
+                    return;
+                }
+                result.doc.save(result.fileName);
                 if (typeof QuotationStorage !== 'undefined') {
-                    QuotationStorage.saveQuotation(cotNumber, pdfBlob).catch(e =>
+                    QuotationStorage.saveQuotation(result.cotNumber, result.blob).catch(e =>
                         console.error('Error guardando cotización:', e)
                     );
                 }
-                if (typeof Toast !== 'undefined') Toast.success('PDF descargado y guardado');
+                if (typeof Toast !== 'undefined') Toast.success(`PDF descargado y guardado — ${result.cotNumber}`);
+                cleanup();
             } catch (e) {
                 console.error('❌ Error descargando PDF:', e);
                 if (typeof Toast !== 'undefined') Toast.error('No se pudo descargar el PDF');
+                reEnable();
             }
-            cleanup();
         });
     }
 
