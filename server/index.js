@@ -947,12 +947,43 @@ app.post('/api/ai/sanata', async (req, res) => {
     try {
         const ctx = req.body || {};
         const items = Array.isArray(ctx.items) ? ctx.items : [];
-        const itemsTxt = items.length
-            ? items.map(i => `- ${i.cantidad || 1}× ${i.nombre}${i.rubro ? ` (${i.rubro})` : ''}`).join('\n')
+        // Agrupado por rubro y SIN cantidades: el texto habla en generalidades, no
+        // enumera inventario (era una de las causas de la "sanata" larga e inflada).
+        const byRubro = {};
+        items.forEach(i => {
+            const r = i.rubro || 'Otros';
+            (byRubro[r] = byRubro[r] || []).push(i.nombre);
+        });
+        const rubrosTxt = Object.keys(byRubro).length
+            ? Object.entries(byRubro).map(([r, ns]) => `- ${r}: ${[...new Set(ns)].join(', ')}`).join('\n')
             : '(todavía sin ítems cargados)';
-        const system = 'Sos redactor comercial de MEPEX, empresa argentina de montaje y equipamiento para stands y exposiciones. Escribís en español rioplatense, tono comercial profesional y cálido. Devolvés UN SOLO párrafo de 60 a 110 palabras, sin viñetas, sin títulos, sin precios ni números de presupuesto. Describís ESTA propuesta concreta apoyándote en los ítems que la componen: mencioná materiales/elementos clave y la experiencia que generan para el visitante (sin listarlos como inventario ni repetir cantidades). Destacás el valor y la presencia de marca para el cliente en su evento. NO inventes ítems ni datos que no estén en el contexto.';
-        const user = `Datos de la propuesta:\n- Cliente: ${ctx.cliente || 's/d'}\n- Evento: ${ctx.evento || 's/d'}\n- Tipo: ${ctx.tipo || 'stand'}${ctx.superficie ? `\n- Superficie: ${ctx.superficie} m²` : ''}${ctx.tipoStand ? `\n- Tipo de stand: ${ctx.tipoStand}` : ''}${ctx.altura ? `\n- Altura: ${ctx.altura}` : ''}${Array.isArray(ctx.espacios) && ctx.espacios.length ? `\n- Espacios: ${ctx.espacios.join(', ')}` : ''}\n\nÍtems que componen la propuesta:\n${itemsTxt}\n\nEscribí el párrafo comercial.`;
-        const text = await callClaude({ system, user, maxTokens: 400, temperature: 0.6 });
+
+        const system = [
+            'Sos redactor comercial de MEPEX (montaje y equipamiento para stands y exposiciones, Argentina). Español rioplatense, tono profesional y directo.',
+            'Devolvés un texto BREVE: 2 a 4 oraciones, 35 a 70 palabras, sin viñetas, sin títulos, sin precios, sin números de presupuesto y SIN cantidades.',
+            'Estructura: (1) una oración de encabezado con los datos que TENGAS — "Propuesta para <cliente>" y, si están, proyecto, evento y fechas; omití los que falten, nunca escribas "s/d" ni inventes. (2) una o dos oraciones describiendo EN GENERAL los rubros involucrados, sin enumerar ítems.',
+            'Reglas por rubro (usá solo las que apliquen según los ítems del contexto):',
+            '- Paneles, estructura, infraestructura o sistema modular → mencioná "sistema modular OCTEXA".',
+            '- Vinilos o gráfica impresa → decí simplemente "vinilo impreso y colocado".',
+            '- Iluminación → mencionala al pasar.',
+            '- Pantallas o equipamiento electrónico/audiovisual → nombralo por encima ("equipamiento audiovisual"), SIN detalles técnicos.',
+            '- Pisos, mobiliario y servicios → mencionalos en general si están.',
+            'NO inventes ítems, materiales, marcas ni datos que no estén en el contexto. NO agregues experiencias, sensaciones ni beneficios fabricados. Si un dato no está, no lo menciones.'
+        ].join('\n');
+
+        const lines = [`- Cliente: ${ctx.cliente || 's/d'}`];
+        if (ctx.proyecto) lines.push(`- Proyecto: ${ctx.proyecto}`);
+        if (ctx.evento) lines.push(`- Evento: ${ctx.evento}`);
+        if (ctx.fechas) lines.push(`- Fechas: ${ctx.fechas}`);
+        if (ctx.lugar) lines.push(`- Lugar: ${ctx.lugar}`);
+        lines.push(`- Tipo: ${ctx.tipo || 'stand'}`);
+        if (ctx.superficie) lines.push(`- Superficie: ${ctx.superficie} m²`);
+        if (ctx.tipoStand) lines.push(`- Tipo de stand: ${ctx.tipoStand}`);
+        if (ctx.altura) lines.push(`- Altura: ${ctx.altura}`);
+        if (Array.isArray(ctx.espacios) && ctx.espacios.length) lines.push(`- Espacios: ${ctx.espacios.join(', ')}`);
+        const user = `Datos de la propuesta:\n${lines.join('\n')}\n\nRubros presentes (agrupados, sin cantidades):\n${rubrosTxt}\n\nEscribí el texto breve siguiendo las reglas.`;
+
+        const text = await callClaude({ system, user, maxTokens: 350, temperature: 0.4 });
         res.json({ success: true, text });
     } catch (error) {
         const status = error.code === 'NO_KEY' ? 503 : 502;

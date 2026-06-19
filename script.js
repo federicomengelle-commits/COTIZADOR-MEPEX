@@ -2176,9 +2176,16 @@ const Render = {
         });
         if (!isMulti) collect(Object.entries(State.selectedItems || {}));
         else (p.spaces || []).forEach(sp => collect(Object.entries(sp.items || {})));
+        const ed = p.eventoData || {};
+        const fechas = (typeof formatEventDateRange === 'function')
+            ? formatEventDateRange(ed.eventStartDate, ed.eventEndDate)
+            : '';
         return {
             cliente: document.getElementById('input-cliente')?.value || p.cliente || '',
+            proyecto: document.getElementById('input-proyecto')?.value || '',
             evento: document.getElementById('input-evento')?.value || p.evento || '',
+            fechas: fechas || '',
+            lugar: ed.venue || '',
             tipo: qType,
             superficie: qType === 'stand' ? p.metraje : undefined,
             altura: qType === 'stand' ? heightLabel : undefined,
