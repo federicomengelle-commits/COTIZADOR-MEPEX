@@ -32,6 +32,7 @@ Cualquier cambio que toque pricing/render debe respetar la diferencia por modo.
 4. **2-query strategy para joins**: PostgREST no soporta joins arbitrarios. Pattern: SELECT parent IDs primero, después SELECT children con `id=in.(uuid1,uuid2,...)`.
 5. **Auth**: usar `Auth.getUser().uid` (no `.id`). Hoy `vendedor_id` está NULL en todas las cotizaciones → el cotizador no está populando uid. Si tocás eso, verificar.
 6. **localStorage es para drafts y preferencias UI**, no para datos de negocio. Hay autosave del borrador en localStorage que es válido. Pero items, precios, cotizaciones guardadas siempre van a Supabase.
+7. **Único dato obligatorio para exportar = Cliente** (2026-06, premisa del dueño). Proyecto y Evento son **opcionales**: la cotización se asigna a un proyecto (y el proyecto a un evento) más tarde en el CRM de LOBBY, no al cotizar. La validación (`validateForExport`) solo exige Cliente + ítems + (superficie en Stand / ≥1 espacio con ítems en Expo/Alquiler). El PDF omite las filas Proyecto/Evento si están vacías (`exportPDF`: `if (proyecto)` / `if (evento)`); el guardado ya tolera `project_id/event_id` NULL. Labels marcados "(opcional)" (`.label-hint`).
 
 ### 🟥 Featureset positivo que NO se rompe
 Favorites, Autosave, Templates, Compare, cotizaciones guardadas, número secuencial via API (`/api/cotizaciones/next-number`), Export PDF (jsPDF, tema dark turquesa), Export CSV, autocomplete cliente/proyecto/evento, Mobile FAB+drawer, shortcuts Ctrl+K/?/Esc, help tips, Toast+Confirm propios.

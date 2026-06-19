@@ -3265,22 +3265,15 @@ const Render = {
         document.querySelectorAll('.input-error').forEach(el => el.classList.remove('input-error'));
 
         const clienteInput = document.getElementById('input-cliente');
-        const proyectoInput = document.getElementById('input-proyecto');
-        const eventoInput = document.getElementById('input-evento');
         const metrajeInput = document.getElementById('input-metraje');
 
         const clienteVal = (clienteInput?.value || '').trim();
-        const proyectoVal = (proyectoInput?.value || '').trim();
-        const eventoVal = (eventoInput?.value || '').trim();
 
+        // Cliente es el ÚNICO dato obligatorio. Proyecto y Evento quedan opcionales:
+        // la cotización se asigna a un proyecto (y el proyecto a un evento) más tarde
+        // en el CRM de LOBBY, no al momento de cotizar.
         if (!clienteVal) {
             errors.push({ field: clienteInput, msg: 'Falta el Cliente' });
-        }
-        if (!proyectoVal) {
-            errors.push({ field: proyectoInput, msg: 'Falta el Proyecto' });
-        }
-        if (!eventoVal) {
-            errors.push({ field: eventoInput, msg: 'Falta el Evento' });
         }
 
         if (qType === 'stand') {
@@ -3519,8 +3512,8 @@ const Render = {
         // a varias escalas para el achique automático, pero esto no cambia). ──
         const today = new Date(); // fecha de emisión — usada en header y filename
         const cliente = document.getElementById('input-cliente')?.value || 'No especificado';
-        const proyecto = document.getElementById('input-proyecto')?.value || '';
-        const evento = document.getElementById('input-evento')?.value || 'No especificado';
+        const proyecto = (document.getElementById('input-proyecto')?.value || '').trim();
+        const evento = (document.getElementById('input-evento')?.value || '').trim(); // opcional: vacío ⇒ no se dibuja
         const eventoData = State.generalParams.eventoData;
         const fechaEventoStr = formatEventDateRange(eventoData?.eventStartDate, eventoData?.eventEndDate);
         const venue = eventoData?.venue || '';
@@ -3699,8 +3692,9 @@ const Render = {
 
         // Columna izquierda: cliente, proyecto (si existe), evento
         // Columna derecha: superficie/tipo/altura, fecha evento (si existe), lugar (si existe)
-        let leftRows = 2; // cliente + evento siempre
+        let leftRows = 1; // cliente siempre
         if (proyecto) leftRows++;
+        if (evento) leftRows++;
         let rightRows = 0;
         if (qType === 'stand') rightRows += 2; // superficie + tipo/altura
         else rightRows += 1; // espacios
@@ -3734,8 +3728,10 @@ const Render = {
             leftY += G(6);
             doc.text(`Proyecto: ${proyecto}`, margin + 5, leftY);
         }
-        leftY += G(6);
-        doc.text(`Evento: ${evento}`, margin + 5, leftY);
+        if (evento) {
+            leftY += G(6);
+            doc.text(`Evento: ${evento}`, margin + 5, leftY);
+        }
 
         // Columna derecha
         let rightY = yPos + G(13);

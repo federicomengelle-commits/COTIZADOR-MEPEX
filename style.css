@@ -1442,6 +1442,15 @@ input[type="checkbox"] {
     letter-spacing: 0.5px;
 }
 
+/* Sufijo "(opcional)" en labels — sin mayúsculas ni el letter-spacing del label,
+   atenuado, para diferenciarlo del único campo obligatorio (Cliente). */
+.label-hint {
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--text-muted);
+    font-weight: 400;
+}
+
 .text-input {
     background: var(--color-bg);
     border: 1px solid var(--color-border);
