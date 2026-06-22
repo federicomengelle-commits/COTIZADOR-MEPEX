@@ -62,8 +62,11 @@ const PropuestaUI = {
 
         let listHTML = '';
         propuestas.forEach(p => {
-            const dateStr = p.createdAt
-                ? new Date(p.createdAt).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+            // Fecha + HORA: dos propuestas del mismo cliente/evento se distinguen por el horario.
+            const d = p.createdAt ? new Date(p.createdAt) : null;
+            const dateStr = d
+                ? d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' }) +
+                  ' ' + d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })
                 : '—';
             const modo = (p.modo || '').toUpperCase();
             const cliente = esc(p.cliente || '—');
