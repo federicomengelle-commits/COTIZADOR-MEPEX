@@ -298,7 +298,12 @@
                     const c = document.createElement('canvas');
                     c.width = w; c.height = h;
                     try {
-                        c.getContext('2d').drawImage(img, 0, 0, w, h);
+                        const cx = c.getContext('2d');
+                        // Relleno BLANCO primero: los renders PNG transparentes, al pasar a JPEG,
+                        // rellenarían la transparencia de NEGRO. Con esto la transparencia queda blanca.
+                        cx.fillStyle = '#ffffff';
+                        cx.fillRect(0, 0, w, h);
+                        cx.drawImage(img, 0, 0, w, h);
                         resolve(c.toDataURL('image/jpeg', quality));
                     } catch (e) { reject(e); }
                 };
