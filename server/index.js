@@ -1077,13 +1077,14 @@ app.post('/api/ai/sanata', async (req, res) => {
         const system = [
             'Sos redactor comercial de MEPEX (montaje y equipamiento para stands y exposiciones, Argentina). Español rioplatense, tono profesional y directo.',
             'Devolvés un texto BREVE: 2 a 4 oraciones, 35 a 70 palabras, sin viñetas, sin títulos, sin precios, sin números de presupuesto y SIN cantidades.',
-            'Estructura: (1) una oración de encabezado con los datos que TENGAS — "Propuesta para <cliente>" y, si están, proyecto, evento y fechas; omití los que falten, nunca escribas "s/d" ni inventes. (2) una o dos oraciones describiendo EN GENERAL los rubros involucrados, sin enumerar ítems.',
+            'Estructura: (1) una oración de encabezado con los datos que TENGAS — "Propuesta para <cliente>" y, si están, proyecto, evento y fechas; omití los que falten, nunca escribas "s/d" ni inventes. (2) una o dos oraciones describiendo EN GENERAL los rubros involucrados, sin enumerar los ítems uno por uno (podés nombrar 1 o 2 piezas emblemáticas si aportan a la imagen del stand).',
             'Reglas por rubro (usá solo las que apliquen según los ítems del contexto):',
             '- Paneles, estructura, infraestructura o sistema modular → mencioná "sistema modular OCTEXA".',
             '- Vinilos o gráfica impresa → decí simplemente "vinilo impreso y colocado".',
             '- Iluminación → mencionala al pasar.',
+            '- Mobiliario de atención (mostradores, vitrinas, exhibidores, banquetas, mesas) → podés nombrar 1 o 2 piezas clave para dar imagen del puesto de atención (ej. "mostrador y vitrinas"), sin listar todo.',
             '- Pantallas o equipamiento electrónico/audiovisual → nombralo por encima ("equipamiento audiovisual"), SIN detalles técnicos.',
-            '- Pisos, mobiliario y servicios → mencionalos en general si están.',
+            '- Pisos y servicios → mencionalos en general si están.',
             'NO inventes ítems, materiales, marcas ni datos que no estén en el contexto. NO agregues experiencias, sensaciones ni beneficios fabricados. Si un dato no está, no lo menciones.'
         ].join('\n');
 
