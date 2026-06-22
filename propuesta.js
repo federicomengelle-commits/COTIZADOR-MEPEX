@@ -272,6 +272,12 @@
 
     // ── Constructor de renders (paso previo a "Exportar propuesta") ──────────
     // Las imágenes son OPCIONALES: se puede generar la propuesta sola, con 1 o con N.
+    const _RENDER_PHRASES = [
+        'Vitrina para exhibición', 'Mostrador de atención', 'Cartel en altura',
+        'Piso de tarima', 'Alfombra ferial', 'Iluminación destacada',
+        'Sistema modular OCTEXA', 'Depósito cerrado'
+    ];
+
     function _stripDataUri(src) {
         const m = /^data:(image\/[a-z0-9.+-]+);base64,(.*)$/i.exec(src || '');
         return m ? { media_type: m[1], data: m[2] } : { media_type: 'image/jpeg', data: '' };
@@ -328,6 +334,9 @@
             '.rstep-ia:disabled{opacity:.5;cursor:not-allowed;}' +
             '.rstep-rm{background:transparent;border:none;color:#888;cursor:pointer;font-size:14px;margin-left:auto;}' +
             '.rstep-rm:hover{color:#FF4D4D;}' +
+            '.rstep-chips{display:flex;flex-wrap:wrap;gap:4px;}' +
+            '.rstep-chip{background:#1a1a1a;border:1px solid #2a2a2a;color:#9aa0a6;border-radius:20px;font-size:10px;padding:2px 8px;cursor:pointer;font-family:inherit;}' +
+            '.rstep-chip:hover{border-color:rgba(0,169,193,.4);color:#00A9C1;}' +
             '.rstep-foot{display:flex;justify-content:space-between;gap:10px;padding:12px 16px;border-top:1px solid #2a2a2a;}';
         document.head.appendChild(s);
     }
@@ -399,9 +408,23 @@
                 actions.className = 'rstep-item-actions';
                 actions.appendChild(iaBtn); actions.appendChild(rm);
 
+                // Chips de frases usadas (acotes de diseño) → se agregan al comentario
+                const chips = document.createElement('div');
+                chips.className = 'rstep-chips';
+                _RENDER_PHRASES.forEach(ph => {
+                    const b = document.createElement('button');
+                    b.type = 'button'; b.className = 'rstep-chip'; b.textContent = ph;
+                    b.addEventListener('click', () => {
+                        const cur = items[idx].comentario || '';
+                        items[idx].comentario = (cur ? cur.replace(/\s*$/, '') + '. ' : '') + ph;
+                        ta.value = items[idx].comentario;
+                    });
+                    chips.appendChild(b);
+                });
+
                 const main = document.createElement('div');
                 main.className = 'rstep-item-main';
-                main.appendChild(ta); main.appendChild(actions);
+                main.appendChild(ta); main.appendChild(chips); main.appendChild(actions);
 
                 row.appendChild(thumb); row.appendChild(main);
                 listEl.appendChild(row);
@@ -418,6 +441,17 @@
             }
             fileInput.value = '';
             renderList();
+            // Autogenerar el comentario apenas se colocan los renders (IA visión)
+            if (typeof API !== 'undefined' && API.isConnected) {
+                items.filter(i => !i.comentario && !i._capTried).forEach(async (it) => {
+                    it._capTried = true;
+                    try {
+                        const { media_type, data } = _stripDataUri(it.src);
+                        const r = await API.aiRenderCaption({ media_type, data }, ctx);
+                        if (r && r.caption && !it.comentario) { it.comentario = r.caption; renderList(); }
+                    } catch (_) { /* silencioso: el usuario puede escribir o usar chips */ }
+                });
+            }
         });
 
         ov.querySelector('#rstep-generate').addEventListener('click', () => {
