@@ -95,6 +95,10 @@ const API = {
     async aiGhosts(ctx) {
         return await this.request('/ai/ghosts', { method: 'POST', body: JSON.stringify(ctx) });
     },
+    // Visión: propone un comentario para un render. image = {media_type, data(base64 sin prefijo)}.
+    async aiRenderCaption(image, contexto) {
+        return await this.request('/ai/render-caption', { method: 'POST', body: JSON.stringify({ image, contexto }) });
+    },
 
     // Obtener catálogo completo
     async getCatalog(forceRefresh = false) {

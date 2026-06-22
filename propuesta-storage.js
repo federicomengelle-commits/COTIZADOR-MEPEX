@@ -22,13 +22,15 @@ const PropuestaStorage = {
             throw new Error('Sin conexión al servidor');
         }
         const p = payload || {};
+        // El snapshot NO guarda los renders (base64 pesado); el PDF ya los tiene embebidos.
+        const { renders, ...pLean } = p;
         const meta = {
             cliente: p.proyecto?.cliente || '',
             evento: p.proyecto?.evento || '',
             modo: p.modo || '',
             total: this._parseARS(p.detalle?.total),
             ref: p.ref || null,
-            payload: p
+            payload: pLean
         };
         const saved = await API.savePropuesta(blob, fileName || 'Propuesta.pdf', meta);
         console.log(`☁️ Propuesta guardada en Supabase (${saved && saved.id})`);

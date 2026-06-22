@@ -93,7 +93,7 @@
         return rubros;
     }
 
-    function buildPayload() {
+    function buildPayload(renders) {
         const gp = State.generalParams;
         const modo = String(gp.quotationType || 'expo').toUpperCase();
         const esStand = modo === 'STAND';
@@ -157,6 +157,7 @@
             proyecto,
             resena: gp.proposalText || '',
             detalle,
+            renders: Array.isArray(renders) ? renders : [],   // [{src(data-URI), comentario}] — opcional
             distribucion: null,
         };
     }
@@ -185,9 +186,9 @@
         return n.replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, ' ').trim().slice(0, 120) + '.pdf';
     }
 
-    async function generate() {
+    async function generate(renders) {
         let payload;
-        try { payload = buildPayload(); }
+        try { payload = buildPayload(renders); }
         catch (e) { return notify('No pude leer la cotización: ' + e.message, 'error'); }
         const err = validate(payload);
         if (err) return notify(err, 'error');
@@ -269,10 +270,167 @@
         }
     }
 
+    // ── Constructor de renders (paso previo a "Exportar propuesta") ──────────
+    // Las imágenes son OPCIONALES: se puede generar la propuesta sola, con 1 o con N.
+    function _stripDataUri(src) {
+        const m = /^data:(image\/[a-z0-9.+-]+);base64,(.*)$/i.exec(src || '');
+        return m ? { media_type: m[1], data: m[2] } : { media_type: 'image/jpeg', data: '' };
+    }
+
+    function _downscale(file, maxDim, quality) {
+        maxDim = maxDim || 1600; quality = quality || 0.82;
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+                const img = new Image();
+                img.onload = () => {
+                    let w = img.width, h = img.height;
+                    if (w > maxDim || h > maxDim) {
+                        const s = maxDim / Math.max(w, h);
+                        w = Math.round(w * s); h = Math.round(h * s);
+                    }
+                    const c = document.createElement('canvas');
+                    c.width = w; c.height = h;
+                    try {
+                        c.getContext('2d').drawImage(img, 0, 0, w, h);
+                        resolve(c.toDataURL('image/jpeg', quality));
+                    } catch (e) { reject(e); }
+                };
+                img.onerror = reject;
+                img.src = reader.result;
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+        });
+    }
+
+    function ensureRenderStepStyles() {
+        if (document.getElementById('rstep-styles')) return;
+        const s = document.createElement('style');
+        s.id = 'rstep-styles';
+        s.textContent =
+            '.rstep-modal{background:#111;border:1px solid #333;border-radius:10px;width:min(680px,96vw);max-height:92vh;display:flex;flex-direction:column;overflow:hidden;color:#E8E8E8;font-family:inherit;}' +
+            '.rstep-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:14px 16px;border-bottom:1px solid #2a2a2a;}' +
+            '.rstep-sub{font-size:12px;color:#888;margin-top:3px;}' +
+            '.rstep-body{padding:14px 16px;overflow-y:auto;flex:1;}' +
+            '.rstep-drop{display:flex;flex-direction:column;align-items:center;gap:4px;padding:18px;border:1.5px dashed #3a3a3a;border-radius:8px;cursor:pointer;color:#9aa0a6;transition:all .15s;text-align:center;}' +
+            '.rstep-drop:hover{border-color:rgba(0,169,193,.5);color:#00A9C1;background:rgba(0,169,193,.05);}' +
+            '.rstep-drop-ico{font-size:22px;}' +
+            '.rstep-drop-hint{font-size:11px;color:#666;}' +
+            '.rstep-list{display:flex;flex-direction:column;gap:10px;margin-top:12px;}' +
+            '.rstep-item{display:flex;gap:10px;padding:8px;border:1px solid #2a2a2a;border-radius:8px;background:#161616;}' +
+            '.rstep-thumb{width:96px;height:72px;object-fit:cover;border-radius:5px;flex-shrink:0;background:#000;}' +
+            '.rstep-item-main{flex:1;display:flex;flex-direction:column;gap:6px;min-width:0;}' +
+            '.rstep-cap{width:100%;background:#0d0d0d;border:1px solid #2a2a2a;border-radius:5px;color:#E8E8E8;font-family:inherit;font-size:12px;padding:6px 8px;resize:vertical;min-height:42px;box-sizing:border-box;}' +
+            '.rstep-item-actions{display:flex;gap:6px;align-items:center;}' +
+            '.rstep-ia{background:transparent;border:1px solid rgba(0,169,193,.4);color:#00A9C1;border-radius:5px;font-size:11px;font-weight:600;padding:4px 9px;cursor:pointer;font-family:inherit;}' +
+            '.rstep-ia:hover{background:rgba(0,169,193,.1);}' +
+            '.rstep-ia:disabled{opacity:.5;cursor:not-allowed;}' +
+            '.rstep-rm{background:transparent;border:none;color:#888;cursor:pointer;font-size:14px;margin-left:auto;}' +
+            '.rstep-rm:hover{color:#FF4D4D;}' +
+            '.rstep-foot{display:flex;justify-content:space-between;gap:10px;padding:12px 16px;border-top:1px solid #2a2a2a;}';
+        document.head.appendChild(s);
+    }
+
+    function openRenderStep() {
+        ensureStyles();
+        ensureRenderStepStyles();
+        const gp = (typeof State !== 'undefined' && State.generalParams) || {};
+        const ctx = { cliente: gp.cliente || '', evento: gp.evento || '', tipo: gp.quotationType || '' };
+        const items = []; // {src(data-URI), comentario}
+
+        const ov = document.createElement('div');
+        ov.className = 'propuesta-overlay';
+        ov.innerHTML =
+            '<div class="rstep-modal">' +
+            '<div class="rstep-head"><div><strong>Exportar propuesta</strong>' +
+            '<div class="rstep-sub">Agregá renders del diseño (opcional). Podés generar la propuesta sola.</div></div>' +
+            '<button class="btn-ghost" id="rstep-close">✕</button></div>' +
+            '<div class="rstep-body">' +
+            '<label class="rstep-drop"><input type="file" id="rstep-file" accept="image/*" multiple hidden>' +
+            '<span class="rstep-drop-ico">🖼️</span><span>Subir renders (JPG/PNG)</span>' +
+            '<span class="rstep-drop-hint">Van después de la carátula, cada uno con su comentario</span></label>' +
+            '<div class="rstep-list" id="rstep-list"></div></div>' +
+            '<div class="rstep-foot"><button class="btn-ghost" id="rstep-cancel">Cancelar</button>' +
+            '<button class="btn-primary" id="rstep-generate">Generar propuesta →</button></div>' +
+            '</div>';
+        document.body.appendChild(ov);
+        const close = () => ov.remove();
+        ov.querySelector('#rstep-close').addEventListener('click', close);
+        ov.querySelector('#rstep-cancel').addEventListener('click', close);
+        ov.addEventListener('click', e => { if (e.target === ov) close(); });
+
+        const listEl = ov.querySelector('#rstep-list');
+        const renderList = () => {
+            listEl.innerHTML = '';
+            items.forEach((it, idx) => {
+                const row = document.createElement('div');
+                row.className = 'rstep-item';
+                const ta = document.createElement('textarea');
+                ta.className = 'rstep-cap';
+                ta.placeholder = 'Comentario del render (o generalo con IA)';
+                ta.value = it.comentario || '';
+                ta.addEventListener('input', () => { items[idx].comentario = ta.value; });
+
+                const thumb = document.createElement('img');
+                thumb.className = 'rstep-thumb'; thumb.src = it.src;
+
+                const iaBtn = document.createElement('button');
+                iaBtn.className = 'rstep-ia'; iaBtn.textContent = '✦ Comentario con IA';
+                iaBtn.addEventListener('click', async () => {
+                    if (typeof API === 'undefined' || !API.isConnected) return notify('Sin conexión para la IA.', 'error');
+                    iaBtn.disabled = true; const prev = iaBtn.textContent; iaBtn.textContent = 'Pensando…';
+                    try {
+                        const { media_type, data } = _stripDataUri(it.src);
+                        const r = await API.aiRenderCaption({ media_type, data }, ctx);
+                        if (r && r.caption) { items[idx].comentario = r.caption; ta.value = r.caption; }
+                        iaBtn.textContent = prev; iaBtn.disabled = false;
+                    } catch (e) {
+                        iaBtn.textContent = prev; iaBtn.disabled = false;
+                        notify('La IA no pudo sugerir el comentario.', 'error');
+                    }
+                });
+
+                const rm = document.createElement('button');
+                rm.className = 'rstep-rm'; rm.title = 'Quitar'; rm.textContent = '✕';
+                rm.addEventListener('click', () => { items.splice(idx, 1); renderList(); });
+
+                const actions = document.createElement('div');
+                actions.className = 'rstep-item-actions';
+                actions.appendChild(iaBtn); actions.appendChild(rm);
+
+                const main = document.createElement('div');
+                main.className = 'rstep-item-main';
+                main.appendChild(ta); main.appendChild(actions);
+
+                row.appendChild(thumb); row.appendChild(main);
+                listEl.appendChild(row);
+            });
+        };
+
+        const fileInput = ov.querySelector('#rstep-file');
+        fileInput.addEventListener('change', async () => {
+            const files = Array.from(fileInput.files || []);
+            for (const f of files) {
+                if (!/^image\//.test(f.type)) continue;
+                try { const src = await _downscale(f); items.push({ src, comentario: '' }); }
+                catch (_) { notify('No pude procesar una imagen.', 'error'); }
+            }
+            fileInput.value = '';
+            renderList();
+        });
+
+        ov.querySelector('#rstep-generate').addEventListener('click', () => {
+            const renders = items.filter(i => i.src).map(i => ({ src: i.src, comentario: i.comentario || '' }));
+            close();
+            generate(renders);
+        });
+    }
+
     function init() {
-        // Un solo botón: la generación ya es preview-first (abre el modal con Descargar/Guardar).
+        // "Exportar propuesta" abre el constructor (renders opcionales) → generate().
         const btn = document.getElementById('btn-propuesta');
-        if (btn) btn.addEventListener('click', generate);
+        if (btn) btn.addEventListener('click', openRenderStep);
     }
     if (typeof document !== 'undefined') {
         if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

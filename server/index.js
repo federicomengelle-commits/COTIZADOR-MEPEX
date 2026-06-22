@@ -1024,12 +1024,19 @@ const AI_MODEL = process.env.ANTHROPIC_MODEL || 'claude-haiku-4-5';
 const AI_ENABLED = !!process.env.ANTHROPIC_API_KEY;
 console.log(AI_ENABLED ? `🤖 IA habilitada (${AI_MODEL})` : '🤖 IA deshabilitada (falta ANTHROPIC_API_KEY en server/.env)');
 
-async function callClaude({ system, user, maxTokens = 600, temperature }) {
+async function callClaude({ system, user, maxTokens = 600, temperature, image }) {
     if (!AI_ENABLED) {
         const err = new Error('IA no configurada: falta ANTHROPIC_API_KEY en server/.env');
         err.code = 'NO_KEY';
         throw err;
     }
+    // Con imagen → content multimodal (visión); sin imagen → string simple.
+    const content = image
+        ? [
+            { type: 'image', source: { type: 'base64', media_type: image.media_type || 'image/jpeg', data: image.data } },
+            { type: 'text', text: user }
+        ]
+        : user;
     const resp = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: {
@@ -1042,7 +1049,7 @@ async function callClaude({ system, user, maxTokens = 600, temperature }) {
             max_tokens: maxTokens,
             ...(temperature != null ? { temperature } : {}),
             system,
-            messages: [{ role: 'user', content: user }]
+            messages: [{ role: 'user', content }]
         })
     });
     if (!resp.ok) {
@@ -1056,6 +1063,45 @@ async function callClaude({ system, user, maxTokens = 600, temperature }) {
 // Estado de la IA — el front lo consulta para mostrar/ocultar features de IA
 app.get('/api/ai/status', (req, res) => {
     res.json({ enabled: AI_ENABLED, model: AI_ENABLED ? AI_MODEL : null });
+});
+
+// Caption de render (VISIÓN): mira la imagen del stand → comentario aclaratorio breve.
+// Para la sección "Diseño del proyecto" de la propuesta (Fase 3.1). El front lo propone
+// y el usuario lo edita. image.data = base64 SIN el prefijo data-URI.
+app.post('/api/ai/render-caption', async (req, res) => {
+    try {
+        const body = req.body || {};
+        const img = body.image || {};
+        let data = img.data || '';
+        let mediaType = img.media_type || 'image/jpeg';
+        // Tolerar que llegue el data-URI completo: lo partimos.
+        const m = /^data:(image\/[a-z0-9.+-]+);base64,(.*)$/i.exec(data);
+        if (m) { mediaType = m[1]; data = m[2]; }
+        if (!data) return res.status(400).json({ success: false, error: 'Falta la imagen' });
+
+        const ctx = body.contexto || {};
+        const system = [
+            'Sos redactor comercial de MEPEX (stands y exposiciones, Argentina). Mirás un RENDER del stand y escribís un comentario aclaratorio BREVE para la propuesta.',
+            '1 sola oración, 12 a 25 palabras, español rioplatense, tono profesional y directo.',
+            'Describí lo relevante que SE VE (estructura/sistema modular OCTEXA, gráfica, mostrador/vitrinas, iluminación, espacios) en relación al proyecto. NO inventes lo que no se ve. Sin precios, sin comillas, sin viñetas.',
+            'Devolvés SOLO el comentario.'
+        ].join('\n');
+        const lines = [];
+        if (ctx.cliente) lines.push(`Cliente: ${ctx.cliente}`);
+        if (ctx.evento) lines.push(`Evento: ${ctx.evento}`);
+        if (ctx.tipo) lines.push(`Tipo: ${ctx.tipo}`);
+        const user = `Contexto del proyecto:\n${lines.join('\n') || '(sin datos)'}\n\nEscribí el comentario del render.`;
+
+        const text = await callClaude({
+            system, user, maxTokens: 120, temperature: 0.5,
+            image: { media_type: mediaType, data }
+        });
+        res.json({ success: true, caption: text });
+    } catch (error) {
+        const status = error.code === 'NO_KEY' ? 503 : 502;
+        console.error('❌ IA render-caption:', error.message);
+        res.status(status).json({ success: false, error: error.message });
+    }
 });
 
 // Sanata comercial: descripción breve de la propuesta para el PDF
