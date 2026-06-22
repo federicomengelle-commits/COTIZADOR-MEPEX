@@ -84,14 +84,19 @@ h4 {
 .btn-nav-collapse:hover { color: var(--color-primary); border-color: var(--color-primary); }
 
 /* Estado colapsado — solo desktop (en tablet/mobile el nav es drawer).
-   Reflow CONTINUO: grid con tracks `auto 1fr auto` y animamos el WIDTH de las
-   columnas laterales (width SÍ es interpolable; grid-template-columns con 1fr
-   NO lo es de forma confiable → quedaba clavado en el valor inicial). */
+   Reflow CONTINUO y CONFIABLE: en desktop el layout pasa a FLEXBOX y animamos el
+   WIDTH de las columnas laterales. El width sobre flex-items es 100% interpolable
+   en todos los navegadores (a diferencia de grid-template-columns con 1fr, que NO
+   interpola y quedaba clavado). El main es flex:1 → absorbe el ancho liberado. */
 @media (min-width: 1025px) {
-    .app-container { grid-template-columns: auto 1fr auto; }
+    .app-container { display: flex; }
     .col-nav,
-    .col-summary { transition: width 280ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+    .col-summary {
+        flex-shrink: 0;
+        transition: width 280ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
     .col-nav { width: 220px; }
+    .col-main { flex: 1; min-width: 0; }
     .col-summary { width: 380px; }
 
     /* Colapsado: nav angosto + resumen más ancho (más espacio para leer la cotización) */
