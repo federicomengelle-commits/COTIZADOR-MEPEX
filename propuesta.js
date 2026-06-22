@@ -441,17 +441,6 @@
             }
             fileInput.value = '';
             renderList();
-            // Autogenerar el comentario apenas se colocan los renders (IA visión)
-            if (typeof API !== 'undefined' && API.isConnected) {
-                items.filter(i => !i.comentario && !i._capTried).forEach(async (it) => {
-                    it._capTried = true;
-                    try {
-                        const { media_type, data } = _stripDataUri(it.src);
-                        const r = await API.aiRenderCaption({ media_type, data }, ctx);
-                        if (r && r.caption && !it.comentario) { it.comentario = r.caption; renderList(); }
-                    } catch (_) { /* silencioso: el usuario puede escribir o usar chips */ }
-                });
-            }
         });
 
         ov.querySelector('#rstep-generate').addEventListener('click', () => {
