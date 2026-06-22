@@ -275,7 +275,9 @@
     const _RENDER_PHRASES = [
         'Vitrina para exhibición', 'Mostrador de atención', 'Cartel en altura',
         'Piso de tarima', 'Alfombra ferial', 'Iluminación destacada',
-        'Sistema modular OCTEXA', 'Depósito cerrado'
+        'Sistema modular OCTEXA', 'Depósito cerrado', 'Living / sillones',
+        'Mesa de reunión', 'Pantalla / TV', 'Logo iluminado', 'Estantería',
+        'Gráfica de marca', 'Acceso al stand', 'Plantas / deco', 'Barra / kitchenette'
     ];
 
     function _stripDataUri(src) {
@@ -357,7 +359,8 @@
             '.acot-h{position:absolute;height:0;border-top:1px solid #111;}' +
             '.acot-v{position:absolute;width:0;border-left:1px solid #111;}' +
             '.acot-dot{position:absolute;width:8px;height:8px;margin:-4px 0 0 -4px;background:#00A9C1;border-radius:50%;}' +
-            '.acot-lab{position:absolute;transform:translateY(-50%);font-size:11px;font-weight:700;color:#111;background:rgba(255,255,255,.55);padding:0 3px;white-space:nowrap;cursor:move;border:1px dashed transparent;}' +
+            '.acot-lab{position:absolute;font-size:11px;font-weight:400;color:#111;background:rgba(255,255,255,.55);padding:0 3px;white-space:nowrap;cursor:move;border:1px dashed transparent;}' +
+            '.rstep-imgtag{font-size:10px;color:#777;}' +
             '.acot-lab.active{border-color:#00A9C1;}' +
             '.acot-side{flex:1;display:flex;flex-direction:column;gap:8px;min-width:190px;}' +
             '.acot-list{display:flex;flex-direction:column;gap:5px;}' +
@@ -385,7 +388,7 @@
             '<div class="rstep-body">' +
             '<label class="rstep-drop"><input type="file" id="rstep-file" accept="image/*" multiple hidden>' +
             '<span class="rstep-drop-ico">🖼️</span><span>Subir renders (JPG/PNG)</span>' +
-            '<span class="rstep-drop-hint">Van después de la carátula, cada uno con su comentario</span></label>' +
+            '<span class="rstep-drop-hint">La 1ra va en la carátula. Reordená y acotá cada render con ✎ Acotar.</span></label>' +
             '<div class="rstep-list" id="rstep-list"></div></div>' +
             '<div class="rstep-foot"><button class="btn-ghost" id="rstep-cancel">Cancelar</button>' +
             '<button class="btn-primary" id="rstep-generate">Generar propuesta →</button></div>' +
@@ -402,30 +405,9 @@
             items.forEach((it, idx) => {
                 const row = document.createElement('div');
                 row.className = 'rstep-item';
-                const ta = document.createElement('textarea');
-                ta.className = 'rstep-cap';
-                ta.placeholder = 'Comentario del render (o generalo con IA)';
-                ta.value = it.comentario || '';
-                ta.addEventListener('input', () => { items[idx].comentario = ta.value; });
 
                 const thumb = document.createElement('img');
                 thumb.className = 'rstep-thumb'; thumb.src = it.src;
-
-                const iaBtn = document.createElement('button');
-                iaBtn.className = 'rstep-ia'; iaBtn.textContent = '✦ Comentario con IA';
-                iaBtn.addEventListener('click', async () => {
-                    if (typeof API === 'undefined' || !API.isConnected) return notify('Sin conexión para la IA.', 'error');
-                    iaBtn.disabled = true; const prev = iaBtn.textContent; iaBtn.textContent = 'Pensando…';
-                    try {
-                        const { media_type, data } = _stripDataUri(it.src);
-                        const r = await API.aiRenderCaption({ media_type, data }, ctx);
-                        if (r && r.caption) { items[idx].comentario = r.caption; ta.value = r.caption; }
-                        iaBtn.textContent = prev; iaBtn.disabled = false;
-                    } catch (e) {
-                        iaBtn.textContent = prev; iaBtn.disabled = false;
-                        notify('La IA no pudo sugerir el comentario.', 'error');
-                    }
-                });
 
                 const rm = document.createElement('button');
                 rm.className = 'rstep-rm'; rm.title = 'Quitar'; rm.textContent = '✕';
@@ -450,31 +432,14 @@
                 const actions = document.createElement('div');
                 actions.className = 'rstep-item-actions';
                 actions.appendChild(up); actions.appendChild(down);
-                actions.appendChild(acotar); actions.appendChild(iaBtn); actions.appendChild(rm);
-
-                // Chips de frases usadas (acotes de diseño) → se agregan al comentario
-                const chips = document.createElement('div');
-                chips.className = 'rstep-chips';
-                _RENDER_PHRASES.forEach(ph => {
-                    const b = document.createElement('button');
-                    b.type = 'button'; b.className = 'rstep-chip'; b.textContent = ph;
-                    b.addEventListener('click', () => {
-                        const cur = items[idx].comentario || '';
-                        items[idx].comentario = (cur ? cur.replace(/\s*$/, '') + '. ' : '') + ph;
-                        ta.value = items[idx].comentario;
-                    });
-                    chips.appendChild(b);
-                });
+                actions.appendChild(acotar); actions.appendChild(rm);
 
                 const main = document.createElement('div');
                 main.className = 'rstep-item-main';
-                if (idx === 0) {
-                    const badge = document.createElement('div');
-                    badge.className = 'rstep-portada';
-                    badge.textContent = '★ Portada (va en la carátula)';
-                    main.appendChild(badge);
-                }
-                main.appendChild(ta); main.appendChild(chips); main.appendChild(actions);
+                const tag = document.createElement('div');
+                tag.className = idx === 0 ? 'rstep-portada' : 'rstep-imgtag';
+                tag.textContent = idx === 0 ? '★ Portada (va en la carátula)' : `Render ${idx + 1}`;
+                main.appendChild(tag); main.appendChild(actions);
 
                 row.appendChild(thumb); row.appendChild(main);
                 listEl.appendChild(row);
@@ -547,7 +512,9 @@
                 layer.appendChild(mk('acot-dot', `left:${a.tx}%;top:${a.ty}%`));
                 const lab = document.createElement('div');
                 lab.className = 'acot-lab' + (i === active ? ' active' : '');
-                lab.style.cssText = `left:${a.lx}%;top:${a.ly}%`;
+                // Texto al lado CONTRARIO al objetivo → la línea toca el borde de la palabra
+                const tr = a.tx >= a.lx ? 'translate(-100%,-50%)' : 'translate(0,-50%)';
+                lab.style.cssText = `left:${a.lx}%;top:${a.ly}%;transform:${tr}`;
                 lab.textContent = a.label || '(sin título)';
                 lab.addEventListener('mousedown', (e) => {
                     e.preventDefault(); e.stopPropagation(); active = i; renderSide(); draw();
