@@ -342,6 +342,28 @@
             '.rstep-chips{display:flex;flex-wrap:wrap;gap:4px;}' +
             '.rstep-chip{background:#1a1a1a;border:1px solid #2a2a2a;color:#9aa0a6;border-radius:20px;font-size:10px;padding:2px 8px;cursor:pointer;font-family:inherit;}' +
             '.rstep-chip:hover{border-color:rgba(0,169,193,.4);color:#00A9C1;}' +
+            '.rstep-mini{background:transparent;border:1px solid #2a2a2a;color:#9aa0a6;border-radius:4px;font-size:11px;width:22px;cursor:pointer;font-family:inherit;}' +
+            '.rstep-mini:disabled{opacity:.3;cursor:default;}' +
+            '.rstep-mini:hover:not(:disabled){border-color:rgba(0,169,193,.4);color:#00A9C1;}' +
+            '.rstep-acotar{background:transparent;border:1px solid rgba(0,169,193,.4);color:#00A9C1;border-radius:5px;font-size:11px;font-weight:600;padding:4px 9px;cursor:pointer;font-family:inherit;}' +
+            '.rstep-acotar:hover{background:rgba(0,169,193,.1);}' +
+            '.rstep-portada{font-size:10px;font-weight:700;color:#F28D15;letter-spacing:.3px;}' +
+            // Editor de acotes
+            '.acot-modal{background:#111;border:1px solid #333;border-radius:10px;width:min(940px,97vw);max-height:94vh;display:flex;flex-direction:column;overflow:hidden;color:#E8E8E8;}' +
+            '.acot-body{display:flex;gap:14px;padding:14px 16px;overflow:auto;}' +
+            '.acot-stage{position:relative;display:inline-block;flex-shrink:0;background:#fff;border:1px solid #2a2a2a;border-radius:4px;line-height:0;}' +
+            '.acot-stage img{display:block;max-width:560px;max-height:62vh;cursor:crosshair;}' +
+            '.acot-layer{position:absolute;inset:0;}' +
+            '.acot-h{position:absolute;height:0;border-top:1px solid #111;}' +
+            '.acot-v{position:absolute;width:0;border-left:1px solid #111;}' +
+            '.acot-dot{position:absolute;width:8px;height:8px;margin:-4px 0 0 -4px;background:#00A9C1;border-radius:50%;}' +
+            '.acot-lab{position:absolute;transform:translateY(-50%);font-size:11px;font-weight:700;color:#111;background:rgba(255,255,255,.55);padding:0 3px;white-space:nowrap;cursor:move;border:1px dashed transparent;}' +
+            '.acot-lab.active{border-color:#00A9C1;}' +
+            '.acot-side{flex:1;display:flex;flex-direction:column;gap:8px;min-width:190px;}' +
+            '.acot-list{display:flex;flex-direction:column;gap:5px;}' +
+            '.acot-row{display:flex;gap:6px;align-items:center;}' +
+            '.acot-row input{flex:1;background:#0d0d0d;border:1px solid #2a2a2a;border-radius:5px;color:#E8E8E8;font-size:12px;padding:5px 7px;font-family:inherit;}' +
+            '.acot-row.active input{border-color:#00A9C1;}' +
             '.rstep-foot{display:flex;justify-content:space-between;gap:10px;padding:12px 16px;border-top:1px solid #2a2a2a;}';
         document.head.appendChild(s);
     }
@@ -409,9 +431,26 @@
                 rm.className = 'rstep-rm'; rm.title = 'Quitar'; rm.textContent = '✕';
                 rm.addEventListener('click', () => { items.splice(idx, 1); renderList(); });
 
+                const mkMini = (txt, title) => {
+                    const b = document.createElement('button');
+                    b.type = 'button'; b.className = 'rstep-mini'; b.title = title; b.textContent = txt;
+                    return b;
+                };
+                const up = mkMini('↑', 'Subir'); up.disabled = idx === 0;
+                const down = mkMini('↓', 'Bajar'); down.disabled = idx === items.length - 1;
+                up.addEventListener('click', () => { if (idx > 0) { const t = items[idx - 1]; items[idx - 1] = items[idx]; items[idx] = t; renderList(); } });
+                down.addEventListener('click', () => { if (idx < items.length - 1) { const t = items[idx + 1]; items[idx + 1] = items[idx]; items[idx] = t; renderList(); } });
+                const nAcotes = (it.anotaciones || []).length;
+                const acotar = document.createElement('button');
+                acotar.type = 'button'; acotar.className = 'rstep-acotar';
+                acotar.textContent = nAcotes ? `✎ Acotar (${nAcotes})` : '✎ Acotar';
+                acotar.title = 'Marcar features del render con líneas';
+                acotar.addEventListener('click', () => openAcotar(it, renderList));
+
                 const actions = document.createElement('div');
                 actions.className = 'rstep-item-actions';
-                actions.appendChild(iaBtn); actions.appendChild(rm);
+                actions.appendChild(up); actions.appendChild(down);
+                actions.appendChild(acotar); actions.appendChild(iaBtn); actions.appendChild(rm);
 
                 // Chips de frases usadas (acotes de diseño) → se agregan al comentario
                 const chips = document.createElement('div');
@@ -429,6 +468,12 @@
 
                 const main = document.createElement('div');
                 main.className = 'rstep-item-main';
+                if (idx === 0) {
+                    const badge = document.createElement('div');
+                    badge.className = 'rstep-portada';
+                    badge.textContent = '★ Portada (va en la carátula)';
+                    main.appendChild(badge);
+                }
                 main.appendChild(ta); main.appendChild(chips); main.appendChild(actions);
 
                 row.appendChild(thumb); row.appendChild(main);
@@ -449,10 +494,109 @@
         });
 
         ov.querySelector('#rstep-generate').addEventListener('click', () => {
-            const renders = items.filter(i => i.src).map(i => ({ src: i.src, comentario: i.comentario || '' }));
+            const renders = items.filter(i => i.src).map(i => ({
+                src: i.src,
+                comentario: i.comentario || '',
+                anotaciones: i.anotaciones || []
+            }));
             close();
             generate(renders);
         });
+    }
+
+    // Editor de acotes: clickeás un punto del render → escribís/elegís el título →
+    // arrastrás la etiqueta. Guarda item.anotaciones = [{label, tx, ty, lx, ly}] (en %).
+    function openAcotar(item, onChange) {
+        ensureStyles(); ensureRenderStepStyles();
+        const anots = (item.anotaciones || []).map(a => ({ ...a }));
+        let active = anots.length ? anots.length - 1 : -1;
+
+        const ov = document.createElement('div');
+        ov.className = 'propuesta-overlay';
+        ov.innerHTML =
+            '<div class="acot-modal">' +
+            '<div class="rstep-head"><div><strong>Acotar render</strong>' +
+            '<div class="rstep-sub">Clickeá un punto del render para marcarlo → escribí el título o usá un chip. Arrastrá la etiqueta para acomodarla.</div></div>' +
+            '<button class="btn-ghost" id="acot-x">✕</button></div>' +
+            '<div class="acot-body"><div class="acot-stage" id="acot-stage"><img id="acot-img" src="' + item.src + '"><div class="acot-layer" id="acot-layer"></div></div>' +
+            '<div class="acot-side"><div class="rstep-chips" id="acot-chips"></div><div class="acot-list" id="acot-list"></div></div></div>' +
+            '<div class="rstep-foot"><button class="btn-ghost" id="acot-cancel">Cancelar</button><button class="btn-primary" id="acot-done">Listo</button></div>' +
+            '</div>';
+        document.body.appendChild(ov);
+        const close = () => ov.remove();
+        ov.querySelector('#acot-x').addEventListener('click', close);
+        ov.querySelector('#acot-cancel').addEventListener('click', close);
+        ov.addEventListener('click', e => { if (e.target === ov) close(); });
+
+        const stage = ov.querySelector('#acot-stage');
+        const img = ov.querySelector('#acot-img');
+        const layer = ov.querySelector('#acot-layer');
+        const listEl = ov.querySelector('#acot-list');
+        const chipsEl = ov.querySelector('#acot-chips');
+        const rectOf = () => img.getBoundingClientRect();
+        const clamp = (n) => Math.max(0, Math.min(100, n));
+
+        const draw = () => {
+            layer.innerHTML = '';
+            anots.forEach((a, i) => {
+                const hx = Math.min(a.lx, a.tx), hw = Math.abs(a.tx - a.lx);
+                const vy = Math.min(a.ly, a.ty), vh = Math.abs(a.ty - a.ly);
+                const mk = (cls, css) => { const d = document.createElement('div'); d.className = cls; d.style.cssText = css; return d; };
+                layer.appendChild(mk('acot-h', `left:${hx}%;top:${a.ly}%;width:${hw}%`));
+                layer.appendChild(mk('acot-v', `left:${a.tx}%;top:${vy}%;height:${vh}%`));
+                layer.appendChild(mk('acot-dot', `left:${a.tx}%;top:${a.ty}%`));
+                const lab = document.createElement('div');
+                lab.className = 'acot-lab' + (i === active ? ' active' : '');
+                lab.style.cssText = `left:${a.lx}%;top:${a.ly}%`;
+                lab.textContent = a.label || '(sin título)';
+                lab.addEventListener('mousedown', (e) => {
+                    e.preventDefault(); e.stopPropagation(); active = i; renderSide(); draw();
+                    const move = (ev) => { const r = rectOf(); a.lx = clamp((ev.clientX - r.left) / r.width * 100); a.ly = clamp((ev.clientY - r.top) / r.height * 100); draw(); };
+                    const up = () => { document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up); };
+                    document.addEventListener('mousemove', move); document.addEventListener('mouseup', up);
+                });
+                layer.appendChild(lab);
+            });
+        };
+
+        const renderSide = () => {
+            chipsEl.innerHTML = '';
+            _RENDER_PHRASES.forEach(ph => {
+                const b = document.createElement('button'); b.type = 'button'; b.className = 'rstep-chip'; b.textContent = ph;
+                b.addEventListener('click', () => { if (active >= 0) { anots[active].label = ph; draw(); renderSide(); } });
+                chipsEl.appendChild(b);
+            });
+            listEl.innerHTML = '';
+            anots.forEach((a, i) => {
+                const row = document.createElement('div'); row.className = 'acot-row' + (i === active ? ' active' : '');
+                const inp = document.createElement('input'); inp.type = 'text'; inp.value = a.label || ''; inp.placeholder = 'Título del acote';
+                inp.addEventListener('focus', () => { active = i; draw(); });
+                inp.addEventListener('input', () => { a.label = inp.value; draw(); });
+                const del = document.createElement('button'); del.type = 'button'; del.className = 'rstep-rm'; del.textContent = '✕';
+                del.addEventListener('click', () => { anots.splice(i, 1); active = Math.min(active, anots.length - 1); draw(); renderSide(); });
+                row.appendChild(inp); row.appendChild(del); listEl.appendChild(row);
+            });
+        };
+
+        stage.addEventListener('click', (e) => {
+            if (e.target.closest('.acot-lab')) return;
+            const r = rectOf();
+            const tx = clamp((e.clientX - r.left) / r.width * 100);
+            const ty = clamp((e.clientY - r.top) / r.height * 100);
+            const lx = tx < 70 ? Math.min(92, tx + 18) : Math.max(8, tx - 22);
+            anots.push({ label: '', tx, ty, lx, ly: ty });
+            active = anots.length - 1;
+            draw(); renderSide();
+        });
+
+        ov.querySelector('#acot-done').addEventListener('click', () => {
+            item.anotaciones = anots.filter(a => a.label && a.label.trim());
+            if (typeof onChange === 'function') onChange();
+            close();
+        });
+
+        if (img.complete && img.naturalWidth) { draw(); renderSide(); }
+        else img.addEventListener('load', () => { draw(); renderSide(); });
     }
 
     function init() {
