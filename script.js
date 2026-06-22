@@ -3584,6 +3584,7 @@ const Render = {
                 const numData = await API.getNextQuotationNumber();
                 if (!numData?.formatted) throw new Error('respuesta sin número');
                 cotNumber = numData.formatted;
+                if (typeof State !== 'undefined') State.generalParams.cotNumber = cotNumber; // la propuesta reusa este Ref (no quema número propio)
                 console.log(`🔢 Número de cotización reservado: ${cotNumber}`);
             } catch (e) {
                 console.error('❌ No se pudo reservar número de cotización:', e.message);
@@ -4179,6 +4180,7 @@ const Render = {
                     return null; // el modal avisa y deja reintentar (no se quemó número)
                 }
                 cotNumber = realNumber; // renderDoc dibuja el "Ref:" con el número real
+                if (typeof State !== 'undefined') State.generalParams.cotNumber = realNumber; // la propuesta reusa este Ref (no quema número propio)
                 const finalDoc = (await renderDoc(chosenScale)).doc;
                 let finalBlob = null;
                 try {

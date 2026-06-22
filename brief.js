@@ -146,6 +146,27 @@ const Brief = {
         return L.join('\n');
     },
 
+    // Precio ESTIMADO del brief — mismo motor que el cotizador (Pricing.compute):
+    // altura sobre infra/iluminación, ítems por m² toman la superficie, IVA 21%.
+    // Devuelve {subtotal, tax, total} o null (sin ítems / sin Pricing).
+    _estimate(a, aiItems) {
+        if (!aiItems || !aiItems.length || typeof Pricing === 'undefined') return null;
+        const surface = parseInt(a.superficie) || 0;
+        const hm = ((typeof DATABASE !== 'undefined' && DATABASE.heightMultipliers) || []).find(h => h.id === a.altura);
+        const params = { heightMultiplier: hm ? hm.multiplier : 1, modifierPercentage: 0, includeFee: false, feePercentage: 0 };
+        const heightAffected = (typeof DATABASE !== 'undefined' && DATABASE.heightAffectedCategories) || ['infrastructure', 'lighting'];
+        const ctx = Pricing.contextFromLiveParams(params, heightAffected);
+        const flat = [];
+        aiItems.forEach(it => {
+            const item = DB.getItemById(String(it.id));
+            if (!item) return;
+            const qty = DB.isAreaItem(item) ? surface : Math.max(1, parseInt(it.cantidad) || 1);
+            if (qty > 0) flat.push({ item, quantity: qty });
+        });
+        if (!flat.length) return null;
+        try { return Pricing.compute(flat, ctx); } catch (_) { return null; }
+    },
+
     async generate(overlay) {
         const a = this._answers(overlay);
         const briefText = this._briefText(a);
@@ -186,12 +207,22 @@ const Brief = {
             itemsHtml = `<div class="brief-empty">IA desactivada: se aplican los parámetros (superficie, tipo, altura). Para autocompletar ítems, configurá ANTHROPIC_API_KEY en el backend.</div>`;
         }
 
+        const est = this._estimate(a, aiItems);
+        const fmt = (n) => `$${Math.round(Number(n) || 0).toLocaleString('es-AR')}`;
+        const totalHtml = est ? `
+                <div class="brief-prev-total">
+                    <span>Total estimado <small>(IVA incl.)</small></span>
+                    <span class="brief-prev-total-amt">${fmt(est.total)}</span>
+                </div>
+                <div class="brief-prev-total-sub">Subtotal ${fmt(est.subtotal)} + IVA ${fmt(est.tax)} · estimación según los ítems sugeridos</div>` : '';
+
         body.innerHTML = `
             <div class="brief-prev">
                 <div class="brief-prev-h">Parámetros del stand</div>
                 <div class="brief-prev-params">${paramRows || 'Sin parámetros'}</div>
                 <div class="brief-prev-h">Ítems propuestos ${aiItems && aiItems.length ? `(${aiItems.length})` : ''}</div>
                 <div class="brief-prev-items">${itemsHtml}</div>
+                ${totalHtml}
                 <div class="brief-prev-note">◇ = baja confianza (revisá). Vas a poder ajustar todo después de aplicar.</div>
             </div>`;
         footer.innerHTML = `

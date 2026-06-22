@@ -616,6 +616,33 @@ h4 {
     margin-top: 10px;
 }
 
+/* Total estimado del brief (brief → precio en 1 paso) */
+.brief-prev-total {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-top: 12px;
+    padding: 10px 12px;
+    background: rgba(0, 169, 193, 0.08);
+    border: 1px solid rgba(0, 169, 193, 0.3);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    font-family: var(--font-heading);
+    font-weight: 700;
+}
+.brief-prev-total small { font-weight: 500; color: var(--text-secondary); }
+.brief-prev-total-amt {
+    font-family: var(--font-mono);
+    color: var(--color-primary);
+    font-size: 1.1rem;
+}
+.brief-prev-total-sub {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    margin-top: 4px;
+    text-align: right;
+}
+
 /* ============================================= */
 /* CENTRO ESTILO RECETA (Fase 1+4 — rediseño)     */
 /* Rubro = lista: renglones cargados arriba,       */
