@@ -899,6 +899,122 @@ app.delete('/api/quotations/:id', async (req, res) => {
 });
 
 // =============================================
+// PROPUESTAS — Panel de propuestas comerciales (Fase 2.3)
+// =============================================
+// Guarda el PDF de la propuesta (generado por /propuesta-api) en el bucket
+// `propuestas-pdf` + una fila en `cotizacion_propuestas` para listarlas en la
+// sidebar. Tabla y bucket PROPIOS del cotizador (migración 004). Espejo del
+// flujo de upload de PDF de cotizaciones.
+const { randomUUID } = require('crypto');
+
+function mapPropuesta(row) {
+    return {
+        id: row.id,
+        cliente: row.cliente,
+        evento: row.evento,
+        modo: row.modo,
+        total: row.total,
+        ref: row.ref,
+        cotizacionId: row.cotizacion_id,
+        pdfUrl: row.pdf_url,
+        createdAt: row.created_at
+    };
+}
+
+// Guardar una propuesta: sube el PDF (multipart) + inserta la metadata.
+app.post('/api/propuestas', upload.single('pdf'), async (req, res) => {
+    if (!req.file) {
+        return res.status(400).json({ success: false, error: 'No se recibió archivo PDF' });
+    }
+    const body = req.body || {};
+    const id = randomUUID();
+    const safeName = String(body.fileName || `Propuesta-${id}.pdf`)
+        .replace(/[^\w.\- ]+/g, '').trim().slice(0, 120) || `${id}.pdf`;
+    const filePath = `${id}/${safeName}`;
+
+    try {
+        console.log(`📎 Guardando propuesta ${id} (${safeName})`);
+
+        const { error: uploadError } = await supabase.storage
+            .from('propuestas-pdf')
+            .upload(filePath, req.file.buffer, { contentType: 'application/pdf', upsert: true });
+        if (uploadError) throw uploadError;
+
+        const { data: urlData } = supabase.storage.from('propuestas-pdf').getPublicUrl(filePath);
+        const pdfUrl = urlData.publicUrl;
+
+        let payload = null;
+        if (body.payload) { try { payload = JSON.parse(body.payload); } catch (_) { /* snapshot opcional */ } }
+        const totalNum = body.total != null && body.total !== '' ? Number(body.total) : null;
+
+        const { data, error } = await supabase
+            .from('cotizacion_propuestas')
+            .insert({
+                id,
+                cliente: body.cliente || null,
+                evento: body.evento || null,
+                modo: body.modo || null,
+                total: Number.isFinite(totalNum) ? totalNum : null,
+                ref: body.ref || null,
+                cotizacion_id: body.cotizacionId || null,
+                pdf_url: pdfUrl,
+                pdf_path: filePath,
+                payload
+            })
+            .select()
+            .single();
+        if (error) throw error;
+
+        console.log(`✅ Propuesta ${id} guardada`);
+        res.json({ success: true, propuesta: mapPropuesta(data) });
+    } catch (error) {
+        console.error('❌ Error guardando propuesta:', error.message);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Listar propuestas (más nuevas primero)
+app.get('/api/propuestas', async (req, res) => {
+    try {
+        const { data, error } = await supabase
+            .from('cotizacion_propuestas')
+            .select('*')
+            .order('created_at', { ascending: false });
+        if (error) throw error;
+        res.json({ success: true, propuestas: (data || []).map(mapPropuesta) });
+    } catch (error) {
+        console.error('❌ Error listando propuestas:', error.message);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Eliminar una propuesta (borra el PDF del storage + la fila)
+app.delete('/api/propuestas/:id', async (req, res) => {
+    const { id } = req.params;
+    try {
+        console.log(`🗑️ Eliminando propuesta: ${id}`);
+        const { data: existing } = await supabase
+            .from('cotizacion_propuestas')
+            .select('id, pdf_path')
+            .eq('id', id)
+            .single();
+
+        if (existing && existing.pdf_path) {
+            await supabase.storage.from('propuestas-pdf').remove([existing.pdf_path]);
+        }
+
+        const { error } = await supabase.from('cotizacion_propuestas').delete().eq('id', id);
+        if (error) throw error;
+
+        console.log(`✅ Propuesta ${id} eliminada`);
+        res.json({ success: true, deleted: id });
+    } catch (error) {
+        console.error('❌ Error eliminando propuesta:', error.message);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// =============================================
 // IA — generación de texto con Claude (Haiku)
 // =============================================
 // Toda llamada al LLM vive acá, en el backend: la API key va en server/.env
@@ -1065,7 +1181,10 @@ app.listen(PORT, () => {
     console.log('      POST /api/quotations          - Create quotation');
     console.log('      PUT  /api/quotations/:id      - Update quotation');
     console.log('      POST /api/quotations/:id/pdf  - Upload PDF');
-    console.log('   📦 Tables: catalogo_items, clientes, proyectos, eventos, cotizaciones');
+    console.log('      GET  /api/propuestas          - List propuestas');
+    console.log('      POST /api/propuestas          - Save propuesta (PDF + meta)');
+    console.log('      DELETE /api/propuestas/:id    - Delete propuesta');
+    console.log('   📦 Tables: catalogo_items, clientes, proyectos, eventos, cotizaciones, cotizacion_propuestas');
     console.log('═══════════════════════════════════════════════');
     console.log('');
 });

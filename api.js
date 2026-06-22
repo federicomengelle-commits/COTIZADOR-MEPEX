@@ -482,6 +482,49 @@ const API = {
     },
 
     // =============================================
+    // PROPUESTAS (Fase 2.3) — panel de propuestas comerciales
+    // =============================================
+
+    // Guardar una propuesta: sube el PDF (multipart) + metadata. Devuelve la fila creada.
+    async savePropuesta(blob, fileName, meta = {}) {
+        const url = `${this.baseUrl}/propuestas`;
+        const formData = new FormData();
+        formData.append('pdf', blob, fileName);
+        formData.append('fileName', fileName);
+        if (meta.cliente != null) formData.append('cliente', meta.cliente);
+        if (meta.evento != null) formData.append('evento', meta.evento);
+        if (meta.modo != null) formData.append('modo', meta.modo);
+        if (meta.total != null) formData.append('total', String(meta.total));
+        if (meta.ref != null) formData.append('ref', meta.ref);
+        if (meta.cotizacionId != null) formData.append('cotizacionId', meta.cotizacionId);
+        if (meta.payload != null) formData.append('payload', JSON.stringify(meta.payload));
+
+        const response = await fetch(url, { method: 'POST', body: formData });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'No se pudo guardar la propuesta');
+        return data.propuesta;
+    },
+
+    async getPropuestas() {
+        try {
+            const response = await this.request('/propuestas');
+            return response.propuestas || [];
+        } catch (error) {
+            console.error('❌ Error fetching propuestas:', error.message);
+            throw error;
+        }
+    },
+
+    async deletePropuesta(id) {
+        try {
+            return await this.request(`/propuestas/${id}`, { method: 'DELETE' });
+        } catch (error) {
+            console.error('❌ Error deleting propuesta:', error.message);
+            throw error;
+        }
+    },
+
+    // =============================================
     // UTILIDADES
     // =============================================
 

@@ -1241,9 +1241,7 @@ const Render = {
                 applyCollapse(c);
             });
         }
-        document.getElementById('btn-load-quotation')?.addEventListener('click', () => {
-            if (typeof QuotationUI !== 'undefined') QuotationUI.openModal();
-        });
+        // "Cargar" se removió del resumen: Cotizaciones vive en el nav izquierdo (renderNav)
         document.getElementById('btn-templates')?.addEventListener('click', () => {
             if (typeof Templates !== 'undefined') Templates.openModal();
         });
@@ -1612,24 +1610,7 @@ const Render = {
         paramsBlock.appendChild(paramsLink);
         navContainer.appendChild(paramsBlock);
 
-        // ============================================
-        // BLOQUE 1.5: COTIZACIONES GUARDADAS
-        // ============================================
-        const savedBlock = document.createElement('div');
-        savedBlock.className = 'nav-block nav-block-saved';
-
-        const savedLink = document.createElement('a');
-        savedLink.className = 'nav-link';
-        savedLink.innerHTML = '<span class="nav-ico">📁</span><span class="nav-text">Cotizaciones</span>';
-        savedLink.href = '#';
-        savedLink.onclick = (e) => {
-            e.preventDefault();
-            if (typeof QuotationUI !== 'undefined') {
-                QuotationUI.openModal();
-            }
-        };
-        savedBlock.appendChild(savedLink);
-        navContainer.appendChild(savedBlock);
+        // (Cotizaciones se movió al bloque de config de abajo, junto a Propuestas y Catálogo)
 
         // ============================================
         // BLOQUE 2: RUBROS (6 CATEGORÍAS)
@@ -1661,11 +1642,34 @@ const Render = {
         navContainer.appendChild(rubrosBlock);
 
         // ============================================
-        // BLOQUE 3: CONFIGURACIÓN
+        // BLOQUE 3: CONFIGURACIÓN (abajo) — Cotizaciones · Propuestas · Catálogo
         // ============================================
         const configBlock = document.createElement('div');
         configBlock.className = 'nav-block nav-block-config';
 
+        // Cotizaciones guardadas (movido desde arriba; "Cargar" del resumen ya no hace falta)
+        const savedLink = document.createElement('a');
+        savedLink.className = 'nav-link';
+        savedLink.innerHTML = '<span class="nav-ico">📁</span><span class="nav-text">Cotizaciones</span>';
+        savedLink.href = '#';
+        savedLink.onclick = (e) => {
+            e.preventDefault();
+            if (typeof QuotationUI !== 'undefined') QuotationUI.openModal();
+        };
+        configBlock.appendChild(savedLink);
+
+        // Propuestas guardadas (Fase 2.3)
+        const propuestasLink = document.createElement('a');
+        propuestasLink.className = 'nav-link';
+        propuestasLink.innerHTML = '<span class="nav-ico">📋</span><span class="nav-text">Propuestas</span>';
+        propuestasLink.href = '#';
+        propuestasLink.onclick = (e) => {
+            e.preventDefault();
+            if (typeof PropuestaUI !== 'undefined') PropuestaUI.openModal();
+        };
+        configBlock.appendChild(propuestasLink);
+
+        // Catálogo (admin)
         const adminLink = document.createElement('a');
         adminLink.className = 'nav-link nav-admin';
         adminLink.id = 'btn-admin';
@@ -2509,6 +2513,11 @@ const Render = {
                 const quotModal = document.getElementById('quotation-modal');
                 if (quotModal && typeof QuotationUI !== 'undefined') {
                     QuotationUI.closeModal();
+                    return;
+                }
+                const propModal = document.getElementById('propuestas-modal');
+                if (propModal && typeof PropuestaUI !== 'undefined') {
+                    PropuestaUI.closeModal();
                     return;
                 }
                 if (isTypingTarget(document.activeElement) && document.activeElement !== searchInput) {

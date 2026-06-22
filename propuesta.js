@@ -234,6 +234,7 @@
             '<div class="propuesta-modal-head"><strong>Vista previa — Propuesta</strong>' +
             '<div class="ph-actions">' +
             '<a class="btn-primary" id="propuesta-dl" download="' + fname + '" href="' + url + '">⬇ Descargar</a>' +
+            '<button class="btn-ghost" id="propuesta-save">💾 Guardar</button>' +
             '<button class="btn-ghost" id="propuesta-close">Cerrar</button>' +
             '</div></div>' +
             '<iframe class="propuesta-frame" src="' + url + '"></iframe>' +
@@ -242,6 +243,30 @@
         const close = () => { ov.remove(); setTimeout(() => URL.revokeObjectURL(url), 3000); };
         ov.querySelector('#propuesta-close').addEventListener('click', close);
         ov.addEventListener('click', e => { if (e.target === ov) close(); });
+
+        // Guardar en el panel de Propuestas (Supabase). Guard anti-doble-click.
+        const saveBtn = ov.querySelector('#propuesta-save');
+        if (saveBtn) {
+            saveBtn.addEventListener('click', async () => {
+                if (saveBtn.dataset.busy) return;
+                if (typeof PropuestaStorage === 'undefined') return notify('Módulo de guardado no disponible.', 'error');
+                if (typeof API === 'undefined' || !API.isConnected) return notify('Sin conexión al servidor: no se puede guardar.', 'error');
+                saveBtn.dataset.busy = '1';
+                saveBtn.disabled = true;
+                const prev = saveBtn.textContent;
+                saveBtn.textContent = 'Guardando…';
+                try {
+                    await PropuestaStorage.save(blob, payload, fname);
+                    saveBtn.textContent = '✓ Guardada';
+                    notify('Propuesta guardada en el panel.', 'success');
+                } catch (e) {
+                    saveBtn.textContent = prev;
+                    saveBtn.disabled = false;
+                    delete saveBtn.dataset.busy;
+                    notify('No se pudo guardar: ' + (e && e.message ? e.message : 'error'), 'error');
+                }
+            });
+        }
     }
 
     function init() {
