@@ -325,7 +325,7 @@
             <div class="items-search-bar">
                 <div class="items-search-wrapper">
                     <input type="text" id="items-search" placeholder="Buscar item por nombre, descripción o categoría..." autocomplete="off" spellcheck="false">
-                    <span class="items-search-kbd" title="Atajo: Ctrl+K o /">Ctrl+K</span>
+                    <span class="items-search-kbd" title="Atajo: Ctrl+B o /">Ctrl+B</span>
                     <button class="items-search-clear" id="items-search-clear" title="Limpiar búsqueda (Esc)" style="display:none">✕</button>
                 </div>
                 <button type="button" id="btn-shortcuts-help" class="btn-shortcuts-help" title="Ver atajos de teclado (?)">
@@ -429,6 +429,13 @@
                 <span class="fab-label">Ver resumen</span>
                 <span class="fab-total" id="fab-total">$0</span>
             </span>
+        </button>
+
+        <!-- PILL DE ATAJOS: botoncito fijo siempre visible (desktop) que abre el cheatsheet -->
+        <button type="button" id="btn-shortcuts-fab" class="btn-shortcuts-fab"
+            title="Ver atajos de teclado (?)" aria-label="Ver atajos de teclado">
+            <span class="sc-fab-icon" aria-hidden="true">⌨</span>
+            <span class="sc-fab-label">Atajos</span>
         </button>
     </div>
 

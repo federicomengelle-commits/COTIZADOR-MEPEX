@@ -2410,6 +2410,11 @@ const Render = {
             this._toggleShortcutsCheatsheet();
         });
 
+        // Pill flotante de atajos (siempre visible en desktop): abre el mismo cheatsheet
+        document.getElementById('btn-shortcuts-fab')?.addEventListener('click', () => {
+            this._toggleShortcutsCheatsheet();
+        });
+
         if (clearBtn) {
             clearBtn.addEventListener('click', () => {
                 input.value = '';
@@ -2421,7 +2426,7 @@ const Render = {
     },
 
     // Atajos de teclado globales
-    // Navegación:  Ctrl/Cmd+K y "/" → focus search · Esc → close/blur
+    // Navegación:  Ctrl/Cmd+B ("B" de Buscar) y "/" → focus search · Esc → close/blur
     // Acciones:    Ctrl+S → guardar borrador · Ctrl+P → exportar PDF
     //              Ctrl+N → reiniciar · ? → cheatsheet de atajos
     _initGlobalShortcuts(searchInput) {
@@ -2444,8 +2449,8 @@ const Render = {
             const ctrl = e.ctrlKey || e.metaKey;
             const key = e.key.toLowerCase();
 
-            // Ctrl/Cmd+K: focus al search
-            if (ctrl && key === 'k') {
+            // Ctrl/Cmd+B ("B" de Buscar): focus al search
+            if (ctrl && key === 'b') {
                 e.preventDefault();
                 focusSearch();
                 return;
@@ -2535,7 +2540,7 @@ const Render = {
                     <div class="shortcuts-section">
                         <h4>Navegación</h4>
                         <dl class="shortcuts-list">
-                            <dt><kbd>${mod}</kbd> + <kbd>K</kbd></dt><dd>Buscar items</dd>
+                            <dt><kbd>${mod}</kbd> + <kbd>B</kbd></dt><dd>Buscar items</dd>
                             <dt><kbd>/</kbd></dt><dd>Buscar items (alternativa)</dd>
                             <dt><kbd>Esc</kbd></dt><dd>Cerrar modal / limpiar búsqueda</dd>
                         </dl>
