@@ -83,9 +83,21 @@ h4 {
 }
 .btn-nav-collapse:hover { color: var(--color-primary); border-color: var(--color-primary); }
 
-/* Estado colapsado — solo desktop (en tablet/mobile el nav es drawer) */
+/* Estado colapsado — solo desktop (en tablet/mobile el nav es drawer).
+   Reflow CONTINUO: grid con tracks `auto 1fr auto` y animamos el WIDTH de las
+   columnas laterales (width SÍ es interpolable; grid-template-columns con 1fr
+   NO lo es de forma confiable → quedaba clavado en el valor inicial). */
 @media (min-width: 1025px) {
-    .app-container.nav-collapsed { grid-template-columns: 62px 1fr 380px; }
+    .app-container { grid-template-columns: auto 1fr auto; }
+    .col-nav,
+    .col-summary { transition: width 280ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+    .col-nav { width: 220px; }
+    .col-summary { width: 380px; }
+
+    /* Colapsado: nav angosto + resumen más ancho (más espacio para leer la cotización) */
+    .app-container.nav-collapsed .col-nav { width: 62px; }
+    .app-container.nav-collapsed .col-summary { width: 460px; }
+
     .nav-collapsed .col-nav .nav-text,
     .nav-collapsed .col-nav .nav-block-title,
     .nav-collapsed .col-nav .nav-badge,
@@ -1250,18 +1262,109 @@ input[type="checkbox"] {
 }
 
 .actions {
-    display: grid;
+    display: flex;
+    flex-direction: column;
     gap: var(--spacing-sm);
     margin-top: auto;
     flex-shrink: 0;
     padding-top: var(--spacing-md);
 }
 
-/* Fila de acciones secundarias — botones ghost (preview, csv, cargar, templates, comparar) */
-.actions-secondary {
+/* Bloque exportable: vista previa (mini) ARRIBA + botón hero abajo */
+.export-block {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.btn-preview-mini {
+    background: transparent;
+    color: #9aa0a6;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    padding: 5px 10px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-family: var(--font-heading);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.4px;
+    transition: all 160ms ease;
+}
+.btn-preview-mini:hover {
+    background: rgba(0, 169, 193, 0.08);
+    border-color: rgba(0, 169, 193, 0.35);
+    color: #00A9C1;
+}
+.btn-preview-mini:active { transform: scale(0.98); }
+
+/* Botones hero de export — mismo "modo hero", distinto color por tipo de salida */
+.btn-hero {
+    background: var(--color-primary);
+    color: #0a0a0a;
+    border: none;
+    padding: 12px;
+    border-radius: var(--radius-md);
+    font-family: var(--font-heading);
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    transition: all 160ms ease;
+}
+.btn-hero:hover { filter: brightness(1.06); transform: translateY(-1px); }
+.btn-hero:active { transform: translateY(0) scale(0.99); }
+.btn-hero:disabled { opacity: 0.5; cursor: not-allowed; transform: none; filter: none; }
+/* Propuesta = naranja secundario de marca (mismo tamaño/peso que presupuesto) */
+.btn-hero-propuesta { background: var(--color-secondary); }
+
+/* Fila: desplegable de herramientas + reiniciar (ícono danger) */
+.actions-tools {
+    display: flex;
+    gap: 8px;
+    align-items: stretch;
+}
+.tools-toggle { flex: 1; }
+.tools-toggle.open { background: rgba(0, 169, 193, 0.08); border-color: rgba(0, 169, 193, 0.35); color: #00A9C1; }
+
+.btn-reset-icon {
+    flex-shrink: 0;
+    width: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    color: #9aa0a6;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: 17px;
+    line-height: 1;
+    transition: all 160ms ease;
+}
+/* Danger: al pasar el mouse avisa que es destructivo */
+.btn-reset-icon:hover {
+    background: rgba(255, 77, 77, 0.12);
+    border-color: rgba(255, 77, 77, 0.5);
+    color: #FF4D4D;
+}
+.btn-reset-icon:active { transform: scale(0.94); }
+
+/* Menú de herramientas — inline (no absolute: el resumen tiene overflow:auto) */
+.tools-menu {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+    grid-template-columns: 1fr 1fr;
     gap: 6px;
+}
+.tools-menu[hidden] { display: none; }
+
+/* Totales compactos — ganar aire vertical para leer mejor el resumen */
+.totals-section.totals-compact { padding: 10px 12px; margin-bottom: 10px; }
+.totals-compact .total-row { font-size: 0.85rem; margin-bottom: 2px; }
+.totals-compact .grand-total {
+    margin-top: 8px;
+    padding: 8px 12px;
+    font-size: 1.02rem;
+    letter-spacing: 0.5px;
 }
 
 .btn-ghost {

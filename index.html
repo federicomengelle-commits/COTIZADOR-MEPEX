@@ -379,16 +379,7 @@
                     <div class="empty-state">No hay items seleccionados</div>
                 </div>
 
-                <div id="heat-meter" class="heat-meter" hidden>
-                    <div class="heat-head">
-                        <span class="heat-flame">🔥</span>
-                        <span class="heat-label">Calor de la propuesta</span>
-                        <span class="heat-state">FRÍA</span>
-                    </div>
-                    <div class="heat-track"><div class="heat-fill"></div></div>
-                </div>
-
-                <div class="totals-section">
+                <div class="totals-section totals-compact">
                     <div class="total-row">
                         <span>Subtotal</span>
                         <span id="subtotal-display">$0.00</span>
@@ -404,16 +395,27 @@
                 </div>
 
                 <div class="actions">
-                    <button id="btn-export" class="btn-primary">Exportar PDF</button>
-                    <div class="actions-secondary">
-                        <button id="btn-brief" class="btn-ghost" title="Armar la cotización con el Brief Express (10 preguntas)">✨ Brief</button>
-                        <button id="btn-preview" class="btn-ghost" title="Ver vista previa antes de descargar">👁 Preview</button>
-                        <button id="btn-export-csv" class="btn-ghost" title="Exportar items a CSV (Excel)">📊 CSV</button>
-                        <button id="btn-propuesta" class="btn-ghost" title="Generar una PROPUESTA comercial en PDF (carátula + detalle)">📄 Propuesta</button>
+                    <!-- Exportables: cada uno con su vista previa arriba del botón hero -->
+                    <div class="export-block">
+                        <button id="btn-preview" class="btn-preview-mini" title="Ver el presupuesto en PDF antes de exportar">👁 Vista previa</button>
+                        <button id="btn-export" class="btn-hero">Exportar presupuesto</button>
+                    </div>
+                    <div class="export-block">
+                        <button id="btn-propuesta-preview" class="btn-preview-mini" title="Ver la propuesta comercial antes de exportar">👁 Vista previa</button>
+                        <button id="btn-propuesta" class="btn-hero btn-hero-propuesta" title="Generar la PROPUESTA comercial en PDF (carátula + detalle)">Exportar propuesta</button>
+                    </div>
+
+                    <!-- Herramientas (desplegable) + reiniciar -->
+                    <div class="actions-tools">
+                        <button type="button" id="btn-tools-toggle" class="btn-ghost tools-toggle" aria-expanded="false" aria-controls="tools-menu" title="Más herramientas">⚙ Herramientas ▾</button>
+                        <button id="btn-reset" class="btn-reset-icon" title="Reiniciar cotización" aria-label="Reiniciar cotización">↻</button>
+                    </div>
+                    <div id="tools-menu" class="tools-menu" hidden>
+                        <button id="btn-brief" class="btn-ghost" title="Armar la cotización con el Brief Express (10 preguntas)">✨ Brief Express</button>
                         <button id="btn-templates" class="btn-ghost" title="Gestionar templates reusables">⚡ Templates</button>
                         <button id="btn-compare" class="btn-ghost" title="Comparar dos cotizaciones">⇌ Comparar</button>
+                        <button id="btn-export-csv" class="btn-ghost" title="Exportar items a CSV (Excel)">📊 Exportar CSV</button>
                     </div>
-                    <button id="btn-reset" class="btn-secondary">Reiniciar</button>
                 </div>
             </div>
         </aside>

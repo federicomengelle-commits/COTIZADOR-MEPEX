@@ -1248,6 +1248,28 @@ const Render = {
         document.getElementById('btn-compare')?.addEventListener('click', () => {
             if (typeof Compare !== 'undefined') Compare.openModal();
         });
+
+        // Desplegable "Herramientas" (Brief · Templates · Comparar · CSV)
+        const toolsToggle = document.getElementById('btn-tools-toggle');
+        const toolsMenu = document.getElementById('tools-menu');
+        if (toolsToggle && toolsMenu) {
+            const setToolsOpen = (open) => {
+                toolsMenu.hidden = !open;
+                toolsToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+                toolsToggle.classList.toggle('open', open);
+            };
+            toolsToggle.addEventListener('click', (e) => {
+                e.stopPropagation();
+                setToolsOpen(toolsMenu.hidden);
+            });
+            // Cerrar al elegir una herramienta o al clickear afuera
+            toolsMenu.addEventListener('click', () => setToolsOpen(false));
+            document.addEventListener('click', (e) => {
+                if (toolsMenu.hidden) return;
+                if (e.target.closest('#tools-menu') || e.target.closest('#btn-tools-toggle')) return;
+                setToolsOpen(false);
+            });
+        }
         // btn-admin se vincula en renderNav()
 
         // Quotation type selector (en params section)

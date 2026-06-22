@@ -272,6 +272,10 @@
     function init() {
         const btn = document.getElementById('btn-propuesta');
         if (btn) btn.addEventListener('click', generate);
+        // "Vista previa" de la propuesta: la generación ya es preview-first
+        // (abre el modal con Descargar/Guardar), así que comparte método.
+        const pv = document.getElementById('btn-propuesta-preview');
+        if (pv) pv.addEventListener('click', generate);
     }
     if (typeof document !== 'undefined') {
         if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
