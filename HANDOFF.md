@@ -8,7 +8,7 @@
 - **Origen**: el handoff del Lobby *"Para llevar al Cotizador — vocabulario de las ramas + toggle de
   detalle"*, tras aplicar allá el ítem G10 de `PENDIENTES.md`.
 - **Prod**: `https://app.mepex.com.ar/cotizador/` (la IP redirige). VPS `~/cotizador`, pm2 `cotizador-api`.
-- **Commits**: `a894750` (spec) · `151fdcd` (nivel de detalle) · `a5bec26` (ramas + Energía) · `93c1368` (docs).
+- **Commits**: `a894750` (spec) · `151fdcd` (nivel de detalle) · `a5bec26` (ramas + Energía) · `93c1368` (docs) · `8d4931d` (handoff) · `dff2ff4` (prompts de IA).
 
 ## ✅ Hecho esta sesión — TODO verificado, no supuesto
 
@@ -20,6 +20,7 @@
 | **Vocabulario** | *Alquiler → Equipamiento* en todo lo visible, **incluido el badge de la carátula de la propuesta, que lo ve el cliente y decía "ALQUILER"**. Clave interna `alquiler` intacta. |
 | **`tipo_cotizacion`** | El `typeMap` del server escribe las 4 palabras acordadas. |
 | **Rama Energía** | Modo nuevo (multi-espacio), rubro `energy` (order 4), mapeo, y los 3 ítems eléctricos movidos en Supabase. |
+| **Prompts de IA** | El vocabulario también del lado de la IA: a *ghosts* se le manda la etiqueta (leía "alquiler"). Y se sacó del prompt de *brief* el bloque `params` entero, que **nadie leía** — el modelo gastaba tokens en algo que se tiraba. |
 | **Cross-sell** | `lighting → energy` en `_GHOST_AFFINITY`: cargar reflectores ahora sugiere el tablero. Antes era imposible (vivían en el mismo rubro). |
 
 **Verificaciones corridas** (no "debería andar"):
@@ -40,12 +41,15 @@
    `cd ~/cotizador && git pull origin main && pm2 restart cotizador-api` (se tocó `server/index.js`
    → el restart es **obligatorio**) + un Ctrl+F5. El orden no es crítico: el motor nuevo dibuja bien
    los payloads viejos.
-2. **Mirar un PDF de verdad con ojos.** Se verificó el contenido (qué filas hay y cuáles no), no el
-   pixel. En Mínimo, con muchos espacios, conviene chequear que el aire entre espacios no quede raro
-   sin la línea de subtotal.
-3. **Avisar al Lobby** (ver §7 del spec): los 2 eléctricos NO cotizables que quedaron en Iluminación,
-   que `tipo_cotizacion` empieza a escribir `Equipamiento`/`Energía` (y el trigger lo propaga a
-   `proyectos.tipo`), y que nació el rubro `Energía` en `catalogo_items`.
+2. ~~**Mirar un PDF de verdad con ojos.**~~ → **HECHO**. Se rasterizó con PyMuPDF y se miró un caso
+   a propósito difícil (5 espacios, 50 ítems) en los tres niveles. **El aire en Mínimo está bien**:
+   la caja oscura del encabezado de cada espacio separa de sobra, la línea de subtotal no hacía
+   falta como separador. El hueco al pie de la hoja **ya existía** (`bottomSafe = pageHeight - 39`,
+   reserva del pie) — sale igual en Detallado, no lo introdujo el nivel de detalle.
+3. **Avisar al Lobby** → documento listo para pasar: **`docs/aviso-al-lobby-20260824.md`**. Las tres
+   cosas: `tipo_cotizacion` empieza a escribir `Equipamiento`/`Energía` (y el trigger lo propaga a
+   `proyectos.tipo`), nació el rubro `Energía`, y los 2 eléctricos NO cotizables que quedaron en
+   Iluminación — con el `UPDATE` propuesto, sin correr, porque el efecto es de su lado.
 4. **Guiones de brief de las otras 3 ramas** — `brief.js` solo tiene el de stand. No es trabajo de
    código: es media hora con Noe. Es el prerequisito del agente de onboarding.
 
