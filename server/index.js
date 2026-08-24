@@ -1163,12 +1163,18 @@ app.post('/api/ai/sanata', async (req, res) => {
     }
 });
 
-// Brief → cotización: extrae params + ítems del catálogo a partir de un brief (Fase 3)
+// Brief → ítems del catálogo a partir de un brief (Fase 3).
+// 🟥 El Brief Express es SOLO de stand, a propósito: `brief.js` tiene las 10 preguntas de
+// stand y los guiones de las otras tres ramas todavía no los validó nadie de comercial
+// (ver HANDOFF). Por eso el front fuerza modo stand y toma superficie/tipo/altura del
+// CUESTIONARIO, no de la IA. El prompt pedía además un bloque `params` que NADIE leía
+// (`brief.js` solo usa `res.items`): se sacó — le hacía gastar tokens al modelo en algo
+// que se tiraba, y encima nombraba las ramas con el vocabulario viejo.
 app.post('/api/ai/brief', async (req, res) => {
     try {
         const { brief, catalog } = req.body || {};
         if (!brief) return res.status(400).json({ success: false, error: 'Falta el brief' });
-        const system = 'Sos un asistente de cotización de MEPEX. A partir de un brief de reunión y un catálogo de ítems, devolvés EXCLUSIVAMENTE un JSON válido (sin texto extra) con esta forma: {"params":{"tipo":"stand|expo|alquiler","superficie":number,"standType":"centro|esquina|peninsula|isla","altura":"standard|media|plus|extra|maxima"},"items":[{"id":"<id del catalogo>","cantidad":number,"confianza":0a1}],"notas":"string"}. Elegí SOLO ids que existan en el catálogo provisto. Si dudás de un ítem, incluilo igual con confianza baja (<0.5). No inventes ids ni cantidades absurdas.';
+        const system = 'Sos un asistente de cotización de MEPEX. A partir de un brief de reunión y un catálogo de ítems, devolvés EXCLUSIVAMENTE un JSON válido (sin texto extra) con esta forma: {"items":[{"id":"<id del catalogo>","cantidad":number,"confianza":0a1}],"notas":"string"}. Elegí SOLO ids que existan en el catálogo provisto. Si dudás de un ítem, incluilo igual con confianza baja (<0.5). No inventes ids ni cantidades absurdas.';
         const user = `CATÁLOGO (id · nombre · rubro · unidad):\n${(catalog || []).map(i => `${i.id} · ${i.name} · ${i.rubro || i.category || ''} · ${i.unit || ''}`).join('\n')}\n\nBRIEF:\n${brief}`;
         const text = await callClaude({ system, user, maxTokens: 1800 });
         let parsed = null;

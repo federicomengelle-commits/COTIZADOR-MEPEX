@@ -2010,7 +2010,9 @@ const Render = {
                 .map(it => ({ id: it.id, name: it.name, rubro: rubro(it) }));
             if (candidates.length === 0) return;
             const resp = await API.aiGhosts({
-                tipo: State.generalParams.quotationType,
+                // La ETIQUETA, no la clave: a la IA hay que decirle "Equipamiento", no
+                // "alquiler" (y "Energía", que la clave sí acierta). Ver DATABASE.quotationTypes.
+                tipo: DB.typeLabel(State.generalParams.quotationType),
                 superficie: State.generalParams.metraje,
                 loaded, candidates
             });
