@@ -1,4 +1,67 @@
-# HANDOFF — COTIZADOR-MEPEX (sesión 2026-06-17)
+# HANDOFF — COTIZADOR-MEPEX (sesión 2026-08-23)
+
+> Para retomar en un chat nuevo. Leer también `CLAUDE.md` (contexto durable) y el spec de esta
+> sesión: `docs/superpowers/specs/2026-08-23-toggle-detalle-y-vocabulario-ramas-design.md`.
+
+## 📍 Estado
+
+- **Origen**: el handoff del Lobby *"Para llevar al Cotizador — vocabulario de las ramas + toggle de
+  detalle"*, tras aplicar allá el ítem G10 de `PENDIENTES.md`.
+- **Prod**: `https://app.mepex.com.ar/cotizador/` (la IP redirige). VPS `~/cotizador`, pm2 `cotizador-api`.
+- **Commits**: `a894750` (spec) · `151fdcd` (nivel de detalle) · `a5bec26` (ramas + Energía) · `93c1368` (docs).
+
+## ✅ Hecho esta sesión — TODO verificado, no supuesto
+
+| | Qué |
+|---|---|
+| **Nivel de detalle** | Selector de 3 posiciones (Mínimo/Medio/Detallado) para Expo/Equipamiento/Energía. **Stand nunca discrimina**: regla dura en `State.detailLevel()`, el selector ni se muestra. Default Mínimo. Se elige ANTES de generar; el preview lo refleja. |
+| **Los dos PDFs** | El acoplamiento modo→detalle estaba escrito **dos veces**: `exportPDF` (jsPDF) y el motor weasyprint. Los dos honran el nivel ahora. |
+| **Motor de propuestas** | Arreglado el **500** (`KeyError 'parcial'`) + los tres niveles. Desplegado en el VPS con backup (`render.py.bak-20260823`). |
+| **Vocabulario** | *Alquiler → Equipamiento* en todo lo visible, **incluido el badge de la carátula de la propuesta, que lo ve el cliente y decía "ALQUILER"**. Clave interna `alquiler` intacta. |
+| **`tipo_cotizacion`** | El `typeMap` del server escribe las 4 palabras acordadas. |
+| **Rama Energía** | Modo nuevo (multi-espacio), rubro `energy` (order 4), mapeo, y los 3 ítems eléctricos movidos en Supabase. |
+| **Cross-sell** | `lighting → energy` en `_GHOST_AFFINITY`: cargar reflectores ahora sugiere el tablero. Antes era imposible (vivían en el mismo rubro). |
+
+**Verificaciones corridas** (no "debería andar"):
+- Los 3 niveles en el **presupuesto**, leyendo el PDF generado con montos distinguibles del subtotal
+  (el primer test daba falso positivo porque con 1 ítem por espacio el monto del ítem *es* el subtotal).
+  **El total da igual en los tres niveles** — se cambia lo que se muestra, nunca lo que se cobra.
+- Los 3 niveles en la **propuesta**, contra el motor real en prod, extrayendo el texto del PDF.
+  `detallado` sale idéntico al anterior (anti-regresión).
+- **Ida y vuelta de persistencia**: guardar → restaurar → draft → reset. Y una cotización **sin** el
+  campo vuelve como `detallado`.
+- El **clasificador real** (`convertToLocalFormat`) contra los 5 ítems eléctricos del catálogo, antes
+  y después de mover el rubro.
+- End-to-end en el navegador: 62 ítems, Energía con 3, Iluminación con 3, los 7 rubros en orden.
+
+## 🔜 PENDIENTES
+
+1. **Deploy a prod del front** — el motor de propuestas YA está desplegado; el front NO.
+   `cd ~/cotizador && git pull origin main && pm2 restart cotizador-api` (se tocó `server/index.js`
+   → el restart es **obligatorio**) + un Ctrl+F5. El orden no es crítico: el motor nuevo dibuja bien
+   los payloads viejos.
+2. **Mirar un PDF de verdad con ojos.** Se verificó el contenido (qué filas hay y cuáles no), no el
+   pixel. En Mínimo, con muchos espacios, conviene chequear que el aire entre espacios no quede raro
+   sin la línea de subtotal.
+3. **Avisar al Lobby** (ver §7 del spec): los 2 eléctricos NO cotizables que quedaron en Iluminación,
+   que `tipo_cotizacion` empieza a escribir `Equipamiento`/`Energía` (y el trigger lo propaga a
+   `proyectos.tipo`), y que nació el rubro `Energía` en `catalogo_items`.
+4. **Guiones de brief de las otras 3 ramas** — `brief.js` solo tiene el de stand. No es trabajo de
+   código: es media hora con Noe. Es el prerequisito del agente de onboarding.
+
+## ⚠️ Cosas que casi me comen
+
+- **`fail2ban` en el VPS**: probé 5 usuarios de SSH a ver cuál entraba, 4 fallaron y me DROPeó el
+  puerto 22 — **y al dueño también**, porque banea por IP. El usuario es **`mepex`**. Se destraba
+  desde la consola web de Hostinger.
+- **`curl -L` sobre un POST**: el 301 al dominio tira el body → 422 "Field required". Pegarle
+  directo a `https://app.mepex.com.ar`.
+- **Un test que miente**: ver arriba, el falso positivo del nivel Medio. Si un marcador puede
+  aparecer por dos motivos distintos, no prueba nada.
+
+---
+
+# (sesión anterior — 2026-06-17)
 
 > Para retomar en un chat nuevo. Leer también `CLAUDE.md` (contexto durable) y, si se trabaja el refactor, `.audit/`.
 
