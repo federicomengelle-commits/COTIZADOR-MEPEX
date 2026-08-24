@@ -248,6 +248,12 @@ const QuotationUI = {
         // Texto de la propuesta (no se trae a templates: puede referir a este cliente/evento)
         State.generalParams.proposalText = clearClientData ? '' : (quotation.proposalText || '');
 
+        // 🟥 Nivel de detalle: si la cotización NO lo trae, es anterior a esta feature y se
+        // emitió DISCRIMINADA. Reimprimir tiene que devolver lo que se mandó, no el default
+        // nuevo (premisa del dueño). A diferencia del texto, el nivel SÍ pasa a templates:
+        // es una preferencia de formato, no contenido de este cliente.
+        State.generalParams.detailLevel = quotation.detailLevel || 'detallado';
+
         // Paso 2: Restaurar generalParams (NO se restaura cotNumber)
         State.generalParams.quotationType = quotation.type;
         State.generalParams.metraje = p.surface;
@@ -330,6 +336,7 @@ const QuotationUI = {
         if (typeof Render !== 'undefined') {
             Render.updateEventInfo(clearClientData ? null : State.generalParams.eventoData);
             Render._refreshProposalUI();
+            Render._refreshDetailUI();
         }
 
         const metrajeInput = document.getElementById('input-metraje');

@@ -3012,6 +3012,62 @@ input[type="checkbox"] {
 }
 
 /* =============================================
+   NIVEL DE DETALLE (solo multi-espacio)
+   Mismo lenguaje visual que el selector de tipo, un punto más chico:
+   es una decisión de salida, no de configuración del proyecto.
+   ============================================= */
+.params-row-detail {
+    padding-bottom: var(--spacing-sm);
+    margin-bottom: var(--spacing-sm);
+    border-bottom: 1px solid var(--color-border);
+}
+
+.detail-level-selector {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    width: 100%;
+}
+
+.detail-btns-params {
+    display: flex;
+    gap: var(--spacing-xs);
+    flex: 1;
+}
+
+.detail-btn-param {
+    flex: 1;
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    padding: var(--spacing-xs) var(--spacing-sm);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    color: var(--text-secondary);
+    font-family: var(--font-heading);
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.detail-btn-param:hover {
+    border-color: var(--color-primary);
+    color: var(--text-primary);
+}
+
+.detail-btn-param.active {
+    border-color: var(--color-primary);
+    background: rgba(0, 169, 193, 0.1);
+    color: var(--color-primary);
+    box-shadow: 0 0 0 1px var(--color-primary);
+}
+
+.detail-btn-label {
+    font-size: inherit;
+}
+
+/* =============================================
    APP FOOTER - MEPEX BRANDING
    ============================================= */
 .app-footer {

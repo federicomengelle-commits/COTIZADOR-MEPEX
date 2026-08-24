@@ -278,6 +278,30 @@
                 <!-- BLOQUE EXPO/ALQUILER: Gestión de Espacios -->
                 <!-- ========================================= -->
                 <div id="expo-params-block" style="display: none;">
+                    <!-- Nivel de detalle del PDF. Vive acá adentro a propósito: este bloque ya se
+                         oculta en Stand, y Stand NUNCA discrimina (premisa del dueño). -->
+                    <div class="params-row params-row-detail">
+                        <div class="detail-level-selector">
+                            <span class="param-inline-label">Nivel de detalle
+                                <span class="label-hint">(lo que ve el cliente)</span>
+                            </span>
+                            <div class="detail-btns-params">
+                                <button class="detail-btn-param active" data-level="minimo"
+                                        title="Lista qué lleva cada espacio. Un solo total al final.">
+                                    <span class="detail-btn-label">Mínimo</span>
+                                </button>
+                                <button class="detail-btn-param" data-level="medio"
+                                        title="Lista qué lleva cada espacio y cuánto sale cada uno. Sin precio por ítem.">
+                                    <span class="detail-btn-label">Medio</span>
+                                </button>
+                                <button class="detail-btn-param" data-level="detallado"
+                                        title="Precio por ítem, subtotal por espacio y total.">
+                                    <span class="detail-btn-label">Detallado</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="spaces-manager">
                         <div class="spaces-header">
                             <span class="param-inline-label">Espacios del Evento</span>

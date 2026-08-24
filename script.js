@@ -995,6 +995,7 @@ const State = {
         includeFee: false,
         feePercentage: 0.10,
         quotationType: 'stand',  // 'stand' | 'expo' | 'alquiler'
+        detailLevel: 'minimo',   // 'minimo' | 'medio' | 'detallado' — cuánto muestra el PDF (ver State.detailLevel())
         proposalText: '',        // texto comercial editable (va al PDF; se autogenera si queda vacío)
         // Expo/Alquiler: modelo de espacios
         spaces: [],              // [{ id, name, surface, items: {} }]
@@ -1071,6 +1072,29 @@ const State = {
     isMultiSpaceMode() {
         const t = this.generalParams.quotationType;
         return t === 'expo' || t === 'alquiler';
+    },
+
+    // =============================================
+    // NIVEL DE DETALLE — cuánto muestra el documento que ve el cliente
+    // =============================================
+    // 🟥 Premisa del dueño: STAND NUNCA DISCRIMINA. No es el default de Stand,
+    // es una regla dura: el selector ni se muestra y acá se fuerza igual.
+    // Los renders (presupuesto jsPDF y propuesta) NO leen el string: preguntan
+    // por las dos predicados de abajo. Fuente única de la decisión.
+    detailLevel() {
+        if (!this.isMultiSpaceMode()) return 'minimo';
+        const lvl = this.generalParams.detailLevel;
+        return (lvl === 'medio' || lvl === 'detallado') ? lvl : 'minimo';
+    },
+
+    // ¿Va el monto pegado a cada ítem?
+    showsItemPrices() {
+        return this.detailLevel() === 'detallado';
+    },
+
+    // ¿Va el subtotal de cada espacio? (mostrar precio por ítem lo implica)
+    showsSpaceSubtotals() {
+        return this.detailLevel() !== 'minimo';
     },
 
     // Obtiene el pool de items actual (global para Stand, del espacio activo para Expo/Alquiler)
@@ -1190,6 +1214,7 @@ const State = {
             includeFee: false,
             feePercentage: 0.10,
             quotationType: 'stand',
+            detailLevel: 'minimo',
             proposalText: '',
             spaces: [],
             activeSpaceId: null
@@ -1275,6 +1300,15 @@ const Render = {
         // Quotation type selector (en params section)
         document.querySelectorAll('.quot-btn-param').forEach(btn => {
             btn.addEventListener('click', () => this.handleQuotationTypeSwitch(btn));
+        });
+
+        // Nivel de detalle del PDF (solo visible en multi-espacio)
+        document.querySelectorAll('.detail-btn-param').forEach(btn => {
+            btn.addEventListener('click', () => {
+                State.generalParams.detailLevel = btn.dataset.level;
+                this._refreshDetailUI();
+                if (typeof Autosave !== 'undefined') Autosave.schedule();
+            });
         });
 
         // Botón agregar espacio
@@ -2184,6 +2218,15 @@ const Render = {
         const ta = document.getElementById('proposal-text');
         if (ta) ta.value = State.generalParams.proposalText || '';
         this._updateProposalCount();
+    },
+
+    // Sincroniza los botones de nivel de detalle con el State. Lo llaman el click,
+    // el reset, la restauración de una cotización guardada y el draft recuperado.
+    _refreshDetailUI() {
+        const lvl = State.generalParams.detailLevel || 'minimo';
+        document.querySelectorAll('.detail-btn-param').forEach(b => {
+            b.classList.toggle('active', b.dataset.level === lvl);
+        });
     },
 
     // Contexto para la IA: ítems CON cantidades + datos del proyecto. Lo comparten el
@@ -3294,6 +3337,11 @@ const Render = {
 
         // Texto de la propuesta: sincronizar el textarea con el State (reset o restore)
         this._refreshProposalUI();
+
+        // Nivel de detalle: igual que arriba, se LEE del State en vez de hardcodear el
+        // default. Esta función corre después de restaurar un draft o una plantilla, así
+        // que fijar 'minimo' acá desincronizaría los botones de lo que se restauró.
+        this._refreshDetailUI();
     },
 
     // =============================================
@@ -3865,6 +3913,11 @@ const Render = {
         // para que PDF y UI usen exactamente el mismo formato de línea de ítem.
         const formatItemLine = (item) => '• ' + this._formatItemLine(item);
 
+        // Nivel de detalle (solo aplica a la rama multi-espacio; Stand nunca discrimina).
+        // Se pregunta al State, que es la fuente única — ver State.detailLevel().
+        const showItemPrices = State.showsItemPrices();
+        const showSpaceSubtotals = State.showsSpaceSubtotals();
+
         // ========================================
         // STAND MODE — items globales por categoría
         // ========================================
@@ -3999,12 +4052,16 @@ const Render = {
                         spaceGrouped[cat.id].forEach(item => {
                             ensureSpace(G(10));
                             const itemTotal = item.price * item.quantity;
+                            // El monto se ACUMULA siempre, se IMPRIMA o no: bajar el nivel de
+                            // detalle cambia lo que se muestra, nunca lo que se cobra.
                             spaceTotal += itemTotal;
 
                             doc.setTextColor(...lightGray);
                             doc.text(formatItemLine(item), margin + 6, yPos);
-                            doc.setTextColor(...white);
-                            doc.text(`$${Math.round(itemTotal).toLocaleString('es-AR')}`, pageWidth - margin, yPos, { align: 'right' });
+                            if (showItemPrices) {
+                                doc.setTextColor(...white);
+                                doc.text(`$${Math.round(itemTotal).toLocaleString('es-AR')}`, pageWidth - margin, yPos, { align: 'right' });
+                            }
                             yPos += G(5);
                         });
 
@@ -4012,18 +4069,22 @@ const Render = {
                     }
                 });
 
-                // Subtotal del espacio
-                ensureSpace(G(14)); // línea de subtotal del espacio
-                doc.setDrawColor(60, 60, 60);
-                doc.setLineWidth(0.3);
-                doc.line(margin + 3, yPos, pageWidth - margin, yPos);
-                yPos += G(4);
-                doc.setFont('helvetica', 'bold');
-                doc.setTextColor(...mediumGray);
-                doc.text(`Subtotal ${space.name}`, margin + 4, yPos);
-                doc.setTextColor(...cyanColor);
-                doc.text(`$${Math.round(spaceTotal).toLocaleString('es-AR')}`, pageWidth - margin, yPos, { align: 'right' });
-                yPos += G(8);
+                // Subtotal del espacio (en nivel Mínimo no va: un solo número, al final)
+                if (showSpaceSubtotals) {
+                    ensureSpace(G(14)); // línea de subtotal del espacio
+                    doc.setDrawColor(60, 60, 60);
+                    doc.setLineWidth(0.3);
+                    doc.line(margin + 3, yPos, pageWidth - margin, yPos);
+                    yPos += G(4);
+                    doc.setFont('helvetica', 'bold');
+                    doc.setTextColor(...mediumGray);
+                    doc.text(`Subtotal ${space.name}`, margin + 4, yPos);
+                    doc.setTextColor(...cyanColor);
+                    doc.text(`$${Math.round(spaceTotal).toLocaleString('es-AR')}`, pageWidth - margin, yPos, { align: 'right' });
+                    yPos += G(8);
+                } else {
+                    yPos += G(4); // aire entre espacios, sin la línea de subtotal
+                }
 
                 grandTotal += spaceTotal;
             });

@@ -261,6 +261,9 @@ const QuotationStorage = {
             date: new Date().toISOString().split('T')[0],
             type: qType,
             proposalText: params.proposalText || '',
+            // Nivel de detalle EFECTIVO con el que se emitió (no el crudo del State):
+            // es el que hay que reproducir si mañana se reimprime esta cotización.
+            detailLevel: State.detailLevel(),
             params: {
                 client: {
                     id: params.clienteData?.id || null,

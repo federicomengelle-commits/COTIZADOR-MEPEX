@@ -151,6 +151,12 @@
 
         return {
             modo,
+            // Nivel de detalle: 'minimo' | 'medio' | 'detallado'. El payload manda SIEMPRE
+            // los importes y el motor decide cuáles imprimir. Es a propósito: si el front
+            // se despliega antes que el motor, un motor viejo ignora este campo y dibuja
+            // detallado — feo pero válido. Si en cambio le sacáramos las claves acá, el
+            // motor viejo tiraría 500 (KeyError 'parcial'). Degradar > romper.
+            nivel_detalle: (typeof State !== 'undefined' && State.detailLevel) ? State.detailLevel() : 'detallado',
             fecha_emision: hoyLargo(),
             ref: gp.cotNumber || null,           // si la cotización ya tiene número
             incluye_diseno: incluyeDiseno(flatAll),
