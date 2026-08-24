@@ -994,7 +994,7 @@ const State = {
         modifierPercentage: 0,
         includeFee: false,
         feePercentage: 0.10,
-        quotationType: 'stand',  // 'stand' | 'expo' | 'alquiler'
+        quotationType: 'stand',  // 'stand' | 'expo' | 'alquiler' (= Equipamiento) | 'energia'
         detailLevel: 'minimo',   // 'minimo' | 'medio' | 'detallado' — cuánto muestra el PDF (ver State.detailLevel())
         proposalText: '',        // texto comercial editable (va al PDF; se autogenera si queda vacío)
         // Expo/Alquiler: modelo de espacios
@@ -1068,10 +1068,16 @@ const State = {
         return this.generalParams.spaces.find(s => s.id === this.generalParams.activeSpaceId) || null;
     },
 
+    // ¿Esta rama se cotiza por espacios? Stand es la única que no.
+    // Predicado sobre un tipo cualquiera (lo necesita el switch, que compara el viejo
+    // contra el nuevo). Fuente única de la lista de ramas multi-espacio.
+    isMultiSpaceType(t) {
+        return t === 'expo' || t === 'alquiler' || t === 'energia';
+    },
+
     // Determina si estamos en modo multi-espacio
     isMultiSpaceMode() {
-        const t = this.generalParams.quotationType;
-        return t === 'expo' || t === 'alquiler';
+        return this.isMultiSpaceType(this.generalParams.quotationType);
     },
 
     // =============================================
@@ -1420,8 +1426,8 @@ const Render = {
 
         const fromStand = oldType === 'stand';
         const toStand = newType === 'stand';
-        const fromMulti = oldType === 'expo' || oldType === 'alquiler';
-        const toMulti = newType === 'expo' || newType === 'alquiler';
+        const fromMulti = State.isMultiSpaceType(oldType);
+        const toMulti = State.isMultiSpaceType(newType);
 
         // Caso 1: Stand → multi-espacio
         if (fromStand && toMulti) {
@@ -1902,7 +1908,10 @@ const Render = {
     _GHOST_AFFINITY: {
         flooring: ['infrastructure', 'lighting'],
         infrastructure: ['lighting', 'equipment'],
-        lighting: ['equipment', 'marketing'],
+        // Luces → energía primero: si cargaste reflectores, te falta el tablero. Es
+        // justamente el cruce que se perdía cuando los tableros vivían en Iluminación.
+        lighting: ['energy', 'equipment'],
+        energy: ['lighting', 'infrastructure'],
         equipment: ['marketing', 'moreservices'],
         marketing: ['moreservices', 'equipment'],
         moreservices: ['equipment', 'lighting']
@@ -2824,7 +2833,8 @@ const Render = {
                 <div class="summary-divider"></div>
             `;
         } else {
-            const typeLabel = qType === 'expo' ? '🎪 Expo' : '📦 Alquiler';
+            const typeMeta = DATABASE.quotationTypes[qType] || DATABASE.quotationTypes.expo;
+            const typeLabel = `${typeMeta.icon} ${typeMeta.label}`;
             summaryHTML += `
                 <div class="summary-params">
                     <div class="summary-param-row">
@@ -3751,9 +3761,8 @@ const Render = {
         doc.setTextColor(...mediumGray);
         doc.text('M O N T A J E   Y   E Q U I P A M I E N T O   P A R A   E X P O S I C I O N E S', margin, 23);
 
-        // Tipo de cotización badge (top-right)
-        const typeLabels = { stand: 'STAND', expo: 'EXPO', alquiler: 'ALQUILER' };
-        const typeLabel = typeLabels[qType] || 'STAND';
+        // Tipo de cotización badge (top-right) — etiqueta desde DATABASE.quotationTypes
+        const typeLabel = DB.typeLabelUpper(qType) || 'STAND';
         doc.setFontSize(9);
         doc.setFont('helvetica', 'bold');
         doc.setTextColor(...white);
@@ -3893,6 +3902,7 @@ const Render = {
             'flooring': '[PIS]',
             'infrastructure': '[INF]',
             'lighting': '[ILU]',
+            'energy': '[ENE]',
             'equipment': '[EQP]',
             'marketing': '[MKT]',
             'moreservices': '[SER]'

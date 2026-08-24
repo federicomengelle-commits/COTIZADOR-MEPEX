@@ -711,7 +711,11 @@ app.post('/api/quotations', async (req, res) => {
         console.log(`➕ Creating quotation: ${data.cotNumber}`);
 
         // Mapas de capitalización (compatibilidad con frontend)
-        const typeMap = { stand: 'Stand', expo: 'Expo', alquiler: 'Alquiler' };
+        // 🟥 `tipo_cotizacion` es la ÚNICA columna que le dice al Lobby de qué rama es un
+        // trabajo, y de acá el trigger la propaga a `proyectos.tipo`. Escribe exactamente
+        // una de las cuatro palabras acordadas (2026-08-23). La clave `alquiler` es interna
+        // y no cambió: la rama que nombra es la que ahora se llama Equipamiento.
+        const typeMap = { stand: 'Stand', expo: 'Expo', alquiler: 'Equipamiento', energia: 'Energía' };
         const standTypeMap = { centro: 'Centro', esquina: 'Esquina', peninsula: 'Peninsula', isla: 'Isla' };
         const heightMap = { 'estándar': 'Estándar', 'media': 'Media', 'plus': 'Plus', 'extra': 'Extra', 'máxima': 'Máxima' };
 
@@ -760,7 +764,11 @@ app.put('/api/quotations/:id', async (req, res) => {
         const data = req.body;
         console.log(`✏️ Updating quotation: ${id}`);
 
-        const typeMap = { stand: 'Stand', expo: 'Expo', alquiler: 'Alquiler' };
+        // 🟥 `tipo_cotizacion` es la ÚNICA columna que le dice al Lobby de qué rama es un
+        // trabajo, y de acá el trigger la propaga a `proyectos.tipo`. Escribe exactamente
+        // una de las cuatro palabras acordadas (2026-08-23). La clave `alquiler` es interna
+        // y no cambió: la rama que nombra es la que ahora se llama Equipamiento.
+        const typeMap = { stand: 'Stand', expo: 'Expo', alquiler: 'Equipamiento', energia: 'Energía' };
         const standTypeMap = { centro: 'Centro', esquina: 'Esquina', peninsula: 'Peninsula', isla: 'Isla' };
         const heightMap = { 'estándar': 'Estándar', 'media': 'Media', 'plus': 'Plus', 'extra': 'Extra', 'máxima': 'Máxima' };
 

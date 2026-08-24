@@ -10,6 +10,28 @@ const DATABASE = {
     lastUpdated: new Date().toISOString(),
     currency: "USD",
 
+    // =============================================
+    // LAS CUATRO RAMAS DEL NEGOCIO
+    // =============================================
+    // Vocabulario acordado con LOBBY (2026-08-23): Stand · Expo · Equipamiento · Energía.
+    // La misma palabra en la factura, en la cuenta contable, en el CRM y en el presupuesto
+    // que ve el cliente.
+    //
+    // 🟥 La CLAVE interna no se toca — `alquiler` sigue siendo `alquiler`. Renombrarla
+    // rompería la restauración de borradores y de las cotizaciones ya guardadas, que la
+    // tienen adentro de `full_state`. Es el mismo criterio con el que el Lobby dejó los
+    // códigos `SRV-*` quietos: cambia la etiqueta, no el identificador.
+    // (Ojo con la trampa: la rama `alquiler` es la que ahora se llama "Equipamiento".)
+    //
+    // "Alquiler" sigue siendo la palabra correcta para la OPERACIÓN (MEPEX alquila todo;
+    // `precio_alquiler`). Lo que cambió es el nombre de la RAMA.
+    quotationTypes: {
+        stand:    { label: 'Stand',        icon: '🏗️' },
+        expo:     { label: 'Expo',         icon: '🎪' },
+        alquiler: { label: 'Equipamiento', icon: '📦' },
+        energia:  { label: 'Energía',      icon: '⚡' }
+    },
+
     // Configuración de rubros
     categories: {
         flooring: {
@@ -30,11 +52,22 @@ const DATABASE = {
             icon: "💡",
             order: 3
         },
+        // Rubro propio desde 2026-08-23. Antes los tableros y tomacorrientes vivían en
+        // Iluminación, mezclados con los reflectores: un presupuesto de energía salía
+        // desparramado entre las luces y no se podía medir qué se vendió de energía.
+        // NO entra en heightAffectedCategories: el multiplicador de altura es cosa de la
+        // estructura y las luces, y además solo aplica en Stand (Energía es multi-espacio).
+        energy: {
+            id: "energy",
+            name: "Energía",
+            icon: "⚡",
+            order: 4
+        },
         equipment: {
             id: "equipment",
             name: "Equipamiento",
             icon: "🪑",
-            order: 4,
+            order: 5,
             subcategories: {
                 furniture: { name: "Mobiliario", icon: "🛋️" },
                 electronics: { name: "Electrónicos", icon: "📺" }
@@ -44,7 +77,7 @@ const DATABASE = {
             id: "marketing",
             name: "Marketing y Servicios",
             icon: "📢",
-            order: 5,
+            order: 6,
             subcategories: {
                 graphics: { name: "Gráfica y Cartelería", icon: "🎨" },
                 design: { name: "Diseño y Branding", icon: "✏️" },
@@ -55,7 +88,7 @@ const DATABASE = {
             id: "moreservices",
             name: "Más Servicios",
             icon: "🛎️",
-            order: 6
+            order: 7
         }
     },
 
@@ -95,6 +128,19 @@ const DATABASE = {
 
 // Funciones de utilidad para la base de datos
 const DB = {
+    // Etiqueta visible de una rama. FUENTE ÚNICA: la usan el botón del selector, el badge
+    // del resumen, el título del PDF de presupuesto y el badge de la carátula de la
+    // propuesta (que el cliente ve). Si dice distinto en dos lados, es un bug.
+    typeLabel(type) {
+        const t = DATABASE.quotationTypes[type];
+        return t ? t.label : (type || '');
+    },
+
+    // La misma etiqueta para los títulos en mayúscula del PDF.
+    typeLabelUpper(type) {
+        return this.typeLabel(type).toUpperCase();
+    },
+
     // Obtener todos los items
     getAllItems() {
         return DATABASE.items;

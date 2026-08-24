@@ -177,6 +177,7 @@ const API = {
             'pisos': 'flooring',
             'infraestructura': 'infrastructure',   // afectado por altura
             'iluminacion': 'lighting',             // afectado por altura
+            'energia': 'energy',                   // tableros, tomas, red eléctrica
             'equipamiento': 'equipment',
             'marketing': 'marketing',
             'marketing y servicios': 'marketing',
@@ -207,10 +208,15 @@ const API = {
         if (!localCategory) {
             const hay = normRubro(`${rubro} ${categoria || ''} ${apiItem.name || ''}`);
             if (/piso|alfombr|tarima|moqueta/.test(hay)) localCategory = 'flooring';
-            else if (/ilumin|luz|luces|spot|led|reflector|electric|artefacto|dicroic/.test(hay)) localCategory = 'lighting';
+            // 🟥 ENERGÍA VA ANTES QUE ILUMINACIÓN, y no es cosmético: `electric` estaba en
+            // el patrón de iluminación y `tablero` en el de equipamiento, así que los
+            // tableros caían entre los reflectores (o entre las sillas) por la puerta de
+            // atrás aunque su rubro dijera Energía. Se sacaron de los dos patrones.
+            else if (/energia|electric|tablero|tomacorriente|disyuntor|termomagnetic|seccional/.test(hay)) localCategory = 'energy';
+            else if (/ilumin|luz|luces|spot|led|reflector|artefacto|dicroic/.test(hay)) localCategory = 'lighting';
             else if (/octexa|panel|estructura|infraestr|tabique|truss|cenefa/.test(hay)) localCategory = 'infrastructure';
             else if (/grafic|vinilo|cartel|impres|lona|banner|marketing|branding/.test(hay)) localCategory = 'marketing';
-            else if (/mobil|mostrador|vitrina|\btv\b|pantalla|audiovisual|tablero|mueble|silla|mesa|banqueta|heladera/.test(hay)) localCategory = 'equipment';
+            else if (/mobil|mostrador|vitrina|\btv\b|pantalla|audiovisual|mueble|silla|mesa|banqueta|heladera/.test(hay)) localCategory = 'equipment';
             else localCategory = 'moreservices';
         }
 

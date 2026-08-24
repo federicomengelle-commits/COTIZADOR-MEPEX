@@ -58,7 +58,7 @@
 
     // Flat global (según modo), para totales y detección.
     function flatItems(gp) {
-        const multi = gp.quotationType === 'expo' || gp.quotationType === 'alquiler';
+        const multi = State.isMultiSpaceType(gp.quotationType);
         if (multi) {
             let flat = [];
             (gp.spaces || []).forEach(sp => { flat = flat.concat(flatFromItems(sp.items)); });
@@ -95,8 +95,12 @@
 
     function buildPayload(renders) {
         const gp = State.generalParams;
-        const modo = String(gp.quotationType || 'expo').toUpperCase();
-        const esStand = modo === 'STAND';
+        const tipo = gp.quotationType || 'expo';
+        // `modo` se pinta como badge en la CARÁTULA, o sea que lo lee el cliente → va la
+        // etiqueta de la rama, no la clave interna (que para Equipamiento dice "alquiler").
+        // El motor solo compara contra "STAND", y esa no cambió.
+        const modo = DB.typeLabelUpper(tipo);
+        const esStand = tipo === 'stand';
         const ctx = ctxFrom(gp);
         const flatAll = flatItems(gp);
         const calc = Pricing.compute(flatAll, ctx);
