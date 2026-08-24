@@ -160,6 +160,13 @@ hoja. Se mantiene la anti-regresión de que `s=1` dibuje idéntico al PDF actual
    `{cant} - {desc}`, igual que la del Stand que ya sale limpia.
 3. La fila `Subtotal {espacio}` se emite solo en `detallado` y `medio`.
 
+> **Refinamiento sobre el diseño original (decidido al implementar).** El front manda
+> **siempre** los importes y agrega `nivel_detalle`; el motor decide cuáles imprimir. La
+> alternativa — que el front omitiera las claves de precio — dejaba el sistema frágil al
+> ORDEN de deploy: un front nuevo contra un motor viejo daba **500**. Así, un motor viejo
+> ignora el campo y dibuja detallado: feo, pero no roto. Degradar antes que romper.
+> Efecto lateral bueno: el cambio del lado del front quedó en una sola línea.
+
 `_provision` y `_provision_stand` **no se tocan**. El caso `espacios: []` (cabecera vacía) queda como
 está: `validateForExport` ya impide exportar sin espacios con ítems, así que no es alcanzable.
 
