@@ -599,6 +599,12 @@ app.get('/api/quotations', async (req, res) => {
         const { data, error } = await supabase
             .from('cotizaciones')
             .select('id, numero, tipo_cotizacion, estado, cliente_id, project_id, event_id, superficie, tipo_stand, altura, subtotal, iva, monto_total, fecha_emision, pdf_url, created_at, updated_at')
+            // Sólo las del Cotizador y vivas (aviso del Lobby 2026-10-02): desde el 2/10 el
+            // Lobby guarda en esta tabla sus presupuestos express y propuestas de prediseño
+            // (origen 'pasarela' | 'prediseno', sin fullState, con el PDF en un bucket
+            // privado) y las borra con _deleted = true.
+            .eq('origen', 'cotizador')
+            .eq('_deleted', false)
             .order('fecha_emision', { ascending: false, nullsFirst: false });
 
         if (error) throw error;
